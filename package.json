@@ -3,10 +3,12 @@
   "version": "1.0.0",
   "main": "index.ts",
   "dependencies": {
+    "@fugood/react-native-audio-pcm-stream": "^1.1.4",
     "@react-native-community/netinfo": "12.0.1",
     "@react-navigation/bottom-tabs": "^7.20.0",
     "@react-navigation/native": "^7.5.0",
     "expo": "~57.0.26",
+    "expo-asset": "~57.0.18",
     "expo-audio": "~57.0.5",
     "expo-battery": "~57.0.3",
     "expo-build-properties": "~57.0.22",
@@ -38,7 +40,7 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
-    "test": "node --experimental-strip-types --test tests/*.test.ts",
+    "test": "node --experimental-strip-types --import ./tests/register.mjs --test tests/*.test.ts",
     "typecheck": "tsc --noEmit"
   },
   "private": true

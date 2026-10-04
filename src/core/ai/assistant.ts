@@ -6,6 +6,7 @@ import { TOOLS } from '../tools/tools';
 import type { ToolContext } from '../tools/types';
 import { searchMemories } from '../../database/repositories/memoriesRepo';
 import { listTasks } from '../../database/repositories/tasksRepo';
+import { getPreference } from '../../database/repositories/settingsRepo';
 import {
   addMessage,
   currentConversationId,
@@ -41,9 +42,10 @@ export async function runTurn(userText: string, deps: TurnDeps): Promise<TurnRes
     .slice(-6)
     .map<ChatTurn>(m => ({ role: m.role as 'user' | 'assistant', content: m.content }));
 
-  const [memories, openTasks] = await Promise.all([
+  const [memories, openTasks, userName] = await Promise.all([
     deps.ctx.memoryEnabled ? searchMemories(userText, 4) : Promise.resolve([]),
     listTasks({ status: 'open' }),
+    getPreference('user_name'),
   ]);
 
   const system = buildSystemPrompt({
@@ -51,6 +53,7 @@ export async function runTurn(userText: string, deps: TurnDeps): Promise<TurnRes
     now,
     memories: memories.map(m => m.content),
     openTaskCount: openTasks.length,
+    userName,
   });
   const messages: ChatTurn[] = [{ role: 'system', content: system }, ...history, { role: 'user', content: userText }];
 

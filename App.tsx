@@ -1,10 +1,12 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { StatusBar, View } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AppStateProvider, useApp } from './src/services/AppState';
 import { RootNavigator } from './src/navigation/RootNavigator';
 import { ThemeProvider, useTheme } from './src/theme';
+import { rescheduleAll } from './src/core/reminders/scheduler';
+import { runtime } from './src/core/runtime';
 
 function Themed() {
   const { settings } = useApp();
@@ -17,6 +19,13 @@ function Themed() {
 
 function Shell() {
   const t = useTheme();
+  useEffect(() => {
+    // Re-register pending reminders on every launch (survives reboot/update).
+    rescheduleAll().catch(() => undefined);
+    return () => {
+      runtime.releaseAll();
+    };
+  }, []);
   return (
     <NavigationContainer>
       <StatusBar barStyle={t.dark ? 'light-content' : 'dark-content'} />

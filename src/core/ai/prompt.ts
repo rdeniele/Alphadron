@@ -31,6 +31,7 @@ export function buildSystemPrompt(opts: {
   now: Date;
   memories: string[];
   openTaskCount: number;
+  userName?: string | null;
 }): string {
   const date = opts.now.toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
   const time = opts.now.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
@@ -38,7 +39,7 @@ export function buildSystemPrompt(opts: {
   const mem = opts.memories.length
     ? `\nThings the user asked you to remember:\n${opts.memories.map(m => `- ${m}`).join('\n')}\n`
     : '';
-  return `You are Alphadron, a private personal assistant running fully offline on the user's phone. Current time: ${date}, ${time}. The user has ${opts.openTaskCount} open task(s).
+  return `You are Alphadex, a private personal assistant running fully offline on the user's phone. Current time: ${date}, ${time}. The user${opts.userName ? ` (${opts.userName})` : ''} has ${opts.openTaskCount} open task(s).
 ${mem}
 You reply with ONE JSON object and nothing else:
 - To perform an action: {"tool": "<name>", "arguments": {...}}

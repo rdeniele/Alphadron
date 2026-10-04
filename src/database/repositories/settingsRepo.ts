@@ -34,3 +34,16 @@ export async function saveSetting<K extends keyof AppSettings>(key: K, value: Ap
     JSON.stringify(value),
   );
 }
+
+export async function getPreference(key: string): Promise<string | null> {
+  const r = await getDb().getFirstAsync<{ value: string }>('SELECT value FROM preferences WHERE key = ?', key);
+  return r?.value ?? null;
+}
+
+export async function setPreference(key: string, value: string) {
+  if (!value.trim()) {
+    await getDb().runAsync('DELETE FROM preferences WHERE key = ?', key);
+    return;
+  }
+  await getDb().runAsync('INSERT OR REPLACE INTO preferences (key, value) VALUES (?, ?)', key, value.trim());
+}

@@ -10,6 +10,8 @@ export interface ModelSpec {
   fileName: string;
   sizeBytes: number;
   sha256: string | null;
+  /** If set, the download is a .tar.bz2 extracted into this directory name under models/. */
+  extractDir?: string;
   note?: string;
 }
 
@@ -42,12 +44,12 @@ export const MODEL_MANIFEST: ModelSpec[] = [
     id: 'kokoro',
     name: 'Kokoro 82M',
     purpose: 'Offline text-to-speech',
-    version: 'sherpa-onnx',
+    version: 'sherpa-onnx kokoro-int8-en-v0_19',
     platform: 'android',
-    url: null,
-    fileName: 'kokoro',
-    sizeBytes: 0,
+    url: 'https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/kokoro-int8-en-v0_19.tar.bz2',
+    fileName: 'kokoro-int8-en-v0_19.tar.bz2',
+    sizeBytes: 103248205,
     sha256: null,
-    note: 'Needs a multi-file sherpa-onnx bundle; wired up in Phase 3.',
+    extractDir: 'kokoro-int8-en-v0_19',
   },
 ];

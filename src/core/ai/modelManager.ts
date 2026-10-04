@@ -1,4 +1,5 @@
 import * as FS from 'expo-file-system/legacy';
+import { extractArchive } from 'react-native-sherpa-onnx/extraction';
 import { MODEL_MANIFEST, type ModelId, type ModelSpec } from './modelManifest';
 import {
   getModelState,
@@ -29,6 +30,9 @@ export function markLoaded(id: ModelId, isLoaded: boolean) {
 }
 
 const pathFor = (spec: ModelSpec) => `${MODELS_DIR}${spec.fileName}`;
+/** Where the usable model lives: the file itself, or the extracted directory. */
+const usablePath = (spec: ModelSpec) => (spec.extractDir ? `${MODELS_DIR}${spec.extractDir}` : pathFor(spec));
+const plain = (uri: string) => uri.replace(/^file:\/\//, '');
 const remove = (uri: string) => FS.deleteAsync(uri, { idempotent: true });
 
 const reset = (id: ModelId, status: ModelStatus = 'not_downloaded') =>
@@ -37,11 +41,11 @@ const reset = (id: ModelId, status: ModelStatus = 'not_downloaded') =>
 export async function getModelInfo(spec: ModelSpec): Promise<ModelInfo> {
   const state = await getModelState(spec.id);
   let status: ModelStatus = state?.status ?? 'not_downloaded';
-  const path = pathFor(spec);
+  const path = usablePath(spec);
   // A "downloading" row with no active job means the app was killed mid-download.
   if (status === 'downloading' && !activeJobs.has(spec.id)) {
     status = 'not_downloaded';
-    await remove(`${path}.part`);
+    await remove(`${pathFor(spec)}.part`);
   }
   if (status === 'downloaded' && !(await FS.getInfoAsync(path)).exists) {
     status = 'not_downloaded';
@@ -107,10 +111,24 @@ export async function downloadModel(
       throw new Error('The downloaded file is the wrong size. Please download again.');
     }
     await FS.moveAsync({ from: partPath, to: finalPath });
+    if (spec.extractDir) {
+      const target = usablePath(spec);
+      await remove(target);
+      const ex = await extractArchive(
+        { modelId: spec.id, archivePath: plain(finalPath), format: 'tar.bz2' },
+        plain(MODELS_DIR),
+        { force: true },
+      );
+      await remove(finalPath);
+      if (!ex.success) {
+        await reset(spec.id, 'corrupted');
+        throw new Error('Could not unpack the voice model. Please download it again.');
+      }
+    }
     await setModelState({
       id: spec.id,
       status: 'downloaded',
-      localPath: finalPath,
+      localPath: usablePath(spec),
       bytesDownloaded: size,
       checksumVerified: false,
     });
@@ -133,6 +151,7 @@ export async function cancelDownload(id: ModelId) {
 
 export async function deleteModel(spec: ModelSpec): Promise<void> {
   loaded.delete(spec.id);
+  await remove(usablePath(spec));
   await remove(pathFor(spec));
   await remove(`${pathFor(spec)}.part`);
   await reset(spec.id);

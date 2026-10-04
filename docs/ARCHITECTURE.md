@@ -53,3 +53,19 @@ Interfaces (`AIProvider`, `STTEngine`, `TTSEngine`, `DeviceService`) live in `co
 ## Prerequisites needed from you
 1. Android Studio + SDK/NDK installed, and a physical Android device (or confirm emulator-only for now).
 2. Confirm Visual Studio 2022 with the Desktop/UWP C++ workloads if Windows is to be built soon.
+
+## Status (2026-10-04)
+
+All phases are implemented in code: foundation, local AI (Qwen via llama.rn, Whisper via whisper.rn, Kokoro via sherpa-onnx),
+text assistant with grammar-constrained tool calls, memory, tasks/reminders/schedule with local notifications,
+push-to-talk voice, Android device tools, and basic personalization (name, memories).
+
+Verified: TypeScript compiles; 25 unit tests pass; `expo export` bundles all native-module imports; `expo-doctor` passes.
+**Not yet verified on a device:** model loading/inference speed, Whisper transcription accuracy, Kokoro playback,
+notification delivery, the EAS build itself. Windows is not implemented.
+
+Known limitations:
+- Model integrity in Expo is checked by exact byte size only (no streaming SHA-256).
+- Interrupted downloads restart from zero (no resume).
+- Wake word and automatic listening are intentionally not implemented.
+- Kokoro is the English int8 build (kokoro-int8-en-v0_19).
