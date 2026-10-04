@@ -1,0 +1,21 @@
+export const migration001 = {
+  version: 1,
+  name: 'initial',
+  sql: [
+    `CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT, created_at INTEGER NOT NULL)`,
+    `CREATE TABLE projects (id INTEGER PRIMARY KEY, name TEXT NOT NULL, description TEXT, status TEXT NOT NULL DEFAULT 'active', created_at INTEGER NOT NULL)`,
+    `CREATE TABLE memories (id INTEGER PRIMARY KEY, content TEXT NOT NULL, category TEXT, sensitive INTEGER NOT NULL DEFAULT 0, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL)`,
+    `CREATE TABLE conversations (id INTEGER PRIMARY KEY, title TEXT, created_at INTEGER NOT NULL)`,
+    `CREATE TABLE messages (id INTEGER PRIMARY KEY, conversation_id INTEGER NOT NULL REFERENCES conversations(id) ON DELETE CASCADE, role TEXT NOT NULL CHECK (role IN ('user','assistant','system','tool')), content TEXT NOT NULL, tool_json TEXT, created_at INTEGER NOT NULL)`,
+    `CREATE INDEX idx_messages_conv ON messages(conversation_id, created_at)`,
+    `CREATE TABLE tasks (id INTEGER PRIMARY KEY, title TEXT NOT NULL, description TEXT, status TEXT NOT NULL DEFAULT 'todo' CHECK (status IN ('todo','in_progress','done','cancelled')), priority INTEGER NOT NULL DEFAULT 2, due_at INTEGER, project_id INTEGER REFERENCES projects(id) ON DELETE SET NULL, created_at INTEGER NOT NULL, completed_at INTEGER)`,
+    `CREATE TABLE reminders (id INTEGER PRIMARY KEY, title TEXT NOT NULL, message TEXT, trigger_at INTEGER NOT NULL, repeat_rule TEXT, enabled INTEGER NOT NULL DEFAULT 1, created_at INTEGER NOT NULL)`,
+    `CREATE INDEX idx_reminders_trigger ON reminders(enabled, trigger_at)`,
+    `CREATE TABLE scheduled_events (id INTEGER PRIMARY KEY, title TEXT NOT NULL, notes TEXT, starts_at INTEGER NOT NULL, ends_at INTEGER, created_at INTEGER NOT NULL)`,
+    `CREATE TABLE notes (id INTEGER PRIMARY KEY, title TEXT, body TEXT NOT NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL)`,
+    `CREATE TABLE preferences (key TEXT PRIMARY KEY, value TEXT NOT NULL)`,
+    `CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)`,
+    `CREATE TABLE activity_logs (id INTEGER PRIMARY KEY, action TEXT NOT NULL, detail TEXT, created_at INTEGER NOT NULL)`,
+    `CREATE TABLE model_state (id TEXT PRIMARY KEY, status TEXT NOT NULL, local_path TEXT, bytes_downloaded INTEGER NOT NULL DEFAULT 0, checksum_verified INTEGER NOT NULL DEFAULT 0, updated_at INTEGER NOT NULL)`,
+  ],
+};
