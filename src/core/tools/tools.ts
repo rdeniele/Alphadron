@@ -1,0 +1,335 @@
+import { formatWhen, parseWhen, startOfLocalDay, endOfLocalDay } from '../scheduling/dateParse';
+import { looksSensitive } from '../memory/sensitive';
+import { SUPPORTED_APPS } from '../../platform/android/device';
+import { cancelReminderNotification, scheduleReminder } from '../reminders/scheduler';
+import * as tasks from '../../database/repositories/tasksRepo';
+import * as reminders from '../../database/repositories/remindersRepo';
+import * as events from '../../database/repositories/eventsRepo';
+import * as notes from '../../database/repositories/notesRepo';
+import * as memories from '../../database/repositories/memoriesRepo';
+import type { Tool, ToolResult } from './types';
+
+const fail = (summary: string): ToolResult => ({ ok: false, summary, chip: 'Could not complete' });
+const num = (v: unknown) => (typeof v === 'number' ? v : undefined);
+const str = (v: unknown) => (typeof v === 'string' ? v : undefined);
+
+const PRIORITY: Record<string, number> = { high: 1, normal: 2, low: 3 };
+
+export const TOOLS: Tool[] = [
+  {
+    name: 'create_task',
+    description: 'Create a to-do task. due_date is optional (e.g. "friday", "2026-10-05").',
+    args: {
+      title: { type: 'string', description: 'task title', required: true, maxLength: 200 },
+      description: { type: 'string', description: 'details' },
+      due_date: { type: 'string', description: 'when it is due, natural language or ISO date', maxLength: 100 },
+      priority: { type: 'string', description: 'priority', enum: ['high', 'normal', 'low'] },
+    },
+    readOnly: false,
+    async run(a, ctx) {
+      let dueAt: number | null = null;
+      if (a.due_date) {
+        const p = parseWhen(String(a.due_date), ctx.now);
+        if (!p) {
+          return fail(`I couldn't understand the due date "${a.due_date}".`);
+        }
+        dueAt = p.date.getTime();
+      }
+      const t = await tasks.createTask({
+        title: String(a.title),
+        description: str(a.description),
+        dueAt,
+        priority: a.priority ? PRIORITY[String(a.priority)] : 2,
+      });
+      const due = dueAt ? ` It's due ${formatWhen(new Date(dueAt), ctx.now)}.` : '';
+      return { ok: true, summary: `Added the task "${t.title}".${due}`, chip: 'Task created', data: t };
+    },
+  },
+  {
+    name: 'complete_task',
+    description: 'Mark a task as done. Give id or the task title.',
+    args: {
+      id: { type: 'number', description: 'task id' },
+      title: { type: 'string', description: 'task title or part of it' },
+    },
+    readOnly: false,
+    async run(a) {
+      const t = await tasks.findOpenTask({ id: num(a.id), title: str(a.title) });
+      if (!t) {
+        return fail("I couldn't find a matching open task.");
+      }
+      await tasks.completeTask(t.id);
+      return { ok: true, summary: `Marked "${t.title}" as done.`, chip: 'Task completed', data: t };
+    },
+  },
+  {
+    name: 'list_tasks',
+    description: 'List the user\'s tasks.',
+    args: { status: { type: 'string', description: 'which tasks', enum: ['open', 'done', 'all'] } },
+    readOnly: true,
+    async run(a, ctx) {
+      const list = await tasks.listTasks({ status: (a.status as 'open' | 'done' | 'all') ?? 'open' });
+      const data = list.map(t => ({
+        id: t.id,
+        title: t.title,
+        status: t.status,
+        due: t.dueAt ? formatWhen(new Date(t.dueAt), ctx.now) : null,
+      }));
+      return { ok: true, summary: `${list.length} task(s).`, chip: 'Tasks checked', data };
+    },
+  },
+  {
+    name: 'create_reminder',
+    description: 'Set a reminder that fires a notification. "when" is the time phrase exactly as the user said it (e.g. "tomorrow at 9 AM").',
+    args: {
+      title: { type: 'string', description: 'what to be reminded about', required: true, maxLength: 200 },
+      when: { type: 'string', description: 'time phrase, e.g. "tomorrow at 9 AM"', required: true, maxLength: 100 },
+      message: { type: 'string', description: 'optional longer message' },
+      repeat: { type: 'string', description: 'repeat rule', enum: ['none', 'daily', 'weekly'] },
+    },
+    readOnly: false,
+    async run(a, ctx) {
+      const p = parseWhen(String(a.when), ctx.now);
+      if (!p) {
+        return fail(`I couldn't understand the time "${a.when}". Try something like "tomorrow at 9 AM".`);
+      }
+      const repeat = a.repeat === 'daily' || a.repeat === 'weekly' ? a.repeat : null;
+      if (!repeat && p.date.getTime() <= ctx.now.getTime()) {
+        return fail('That time has already passed.');
+      }
+      const r = await reminders.createReminder({
+        title: String(a.title),
+        message: str(a.message),
+        triggerAt: p.date.getTime(),
+        repeatRule: repeat,
+      });
+      const scheduled = await scheduleReminder(r);
+      const when = formatWhen(p.date, ctx.now);
+      const warn = scheduled ? '' : ' (Notifications are turned off, so it will not alert you. Enable them in system settings.)';
+      return {
+        ok: true,
+        summary: `Done. I'll remind you ${when}${repeat ? `, repeating ${repeat}` : ''}.${warn}`,
+        chip: 'Reminder created',
+        data: r,
+      };
+    },
+  },
+  {
+    name: 'cancel_reminder',
+    description: 'Cancel an upcoming reminder. Give id or the reminder title.',
+    args: {
+      id: { type: 'number', description: 'reminder id' },
+      title: { type: 'string', description: 'reminder title or part of it' },
+    },
+    readOnly: false,
+    async run(a) {
+      const r = await reminders.findReminder({ id: num(a.id), title: str(a.title) });
+      if (!r) {
+        return fail("I couldn't find a matching reminder.");
+      }
+      await reminders.setReminderEnabled(r.id, false);
+      await cancelReminderNotification(r.id);
+      return { ok: true, summary: `Cancelled the reminder "${r.title}".`, chip: 'Reminder cancelled', data: r };
+    },
+  },
+  {
+    name: 'create_note',
+    description: 'Save a note.',
+    args: {
+      title: { type: 'string', description: 'note title', maxLength: 200 },
+      body: { type: 'string', description: 'note text', required: true },
+    },
+    readOnly: false,
+    async run(a) {
+      const n = await notes.createNote({ title: str(a.title), body: String(a.body) });
+      return { ok: true, summary: 'Saved your note.', chip: 'Note saved', data: n };
+    },
+  },
+  {
+    name: 'search_notes',
+    description: 'Search the user\'s notes by keywords.',
+    args: { query: { type: 'string', description: 'keywords', required: true } },
+    readOnly: true,
+    async run(a) {
+      const found = await notes.searchNotes(String(a.query));
+      return {
+        ok: true,
+        summary: `${found.length} note(s) found.`,
+        chip: 'Notes searched',
+        data: found.map(n => ({ title: n.title, body: n.body.slice(0, 300) })),
+      };
+    },
+  },
+  {
+    name: 'save_memory',
+    description: 'Remember a fact about the user for the long term. Only when the user asks to remember something or states a lasting preference/fact.',
+    args: {
+      content: { type: 'string', description: 'the fact, phrased in third person or neutral', required: true, maxLength: 500 },
+      category: { type: 'string', description: 'preference, fact, project, routine or other', enum: ['preference', 'fact', 'project', 'routine', 'other'] },
+    },
+    readOnly: false,
+    async run(a, ctx) {
+      if (!ctx.memoryEnabled) {
+        return fail('Memory is turned off in Settings, so I did not save that.');
+      }
+      const content = String(a.content);
+      const sensitive = looksSensitive(content);
+      if (sensitive) {
+        const ok = await ctx.confirm(`This looks sensitive:\n\n"${content}"\n\nSave it to permanent memory?`);
+        if (!ok) {
+          return { ok: false, summary: "Okay, I won't save that.", chip: 'Not saved' };
+        }
+      }
+      const m = await memories.addMemory({ content, category: str(a.category), sensitive });
+      return { ok: true, summary: "Got it, I'll remember that.", chip: 'Memory saved', data: m };
+    },
+  },
+  {
+    name: 'search_memory',
+    description: 'Look up things the user told Alphadex to remember.',
+    args: { query: { type: 'string', description: 'keywords', required: true } },
+    readOnly: true,
+    async run(a, ctx) {
+      if (!ctx.memoryEnabled) {
+        return { ok: true, summary: 'Memory is turned off.', chip: 'Memory off', data: [] };
+      }
+      const found = await memories.searchMemories(String(a.query));
+      return { ok: true, summary: `${found.length} memory(ies).`, chip: 'Memory searched', data: found.map(m => m.content) };
+    },
+  },
+  {
+    name: 'get_schedule',
+    description: 'Get what the user has on a given day: tasks due, reminders and events. "when" defaults to today (e.g. "tomorrow", "friday").',
+    args: { when: { type: 'string', description: 'day phrase, e.g. "tomorrow"', maxLength: 100 } },
+    readOnly: true,
+    async run(a, ctx) {
+      const phrase = a.when ? String(a.when) : 'today';
+      const p = parseWhen(phrase, ctx.now) ?? parseWhen('today', ctx.now)!;
+      const from = startOfLocalDay(p.date);
+      const to = endOfLocalDay(p.date);
+      const isToday = from === startOfLocalDay(ctx.now);
+      const [dueTasks, rems, evs, overdue] = await Promise.all([
+        tasks.listTasks({ status: 'open', dueBefore: to }),
+        reminders.listReminders({ from, to }),
+        events.listEvents(from, to),
+        isToday ? tasks.listTasks({ status: 'open', dueBefore: from - 1 }) : Promise.resolve([]),
+      ]);
+      const time = (ms: number) => formatWhen(new Date(ms), ctx.now).replace(/^.* at /, '');
+      const data = {
+        day: formatWhen(new Date(from + 1), ctx.now).replace(/ at .*/, ''),
+        tasks_due: dueTasks.filter(t => t.dueAt! >= from).map(t => ({ title: t.title })),
+        overdue_tasks: overdue.map(t => ({ title: t.title })),
+        reminders: rems.map(r => ({ title: r.title, time: time(r.triggerAt) })),
+        events: evs.map(e => ({ title: e.title, time: time(e.startsAt) })),
+      };
+      return { ok: true, summary: 'Schedule retrieved.', chip: 'Schedule checked', data };
+    },
+  },
+  {
+    name: 'create_schedule',
+    description: 'Add an event to the user\'s schedule/calendar at a specific time.',
+    args: {
+      title: { type: 'string', description: 'event title', required: true, maxLength: 200 },
+      when: { type: 'string', description: 'time phrase, e.g. "friday at 2 PM"', required: true, maxLength: 100 },
+      duration_minutes: { type: 'number', description: 'length in minutes' },
+    },
+    readOnly: false,
+    async run(a, ctx) {
+      const p = parseWhen(String(a.when), ctx.now);
+      if (!p) {
+        return fail(`I couldn't understand the time "${a.when}".`);
+      }
+      const dur = num(a.duration_minutes);
+      const e = await events.createEvent({
+        title: String(a.title),
+        startsAt: p.date.getTime(),
+        endsAt: dur ? p.date.getTime() + dur * 60000 : null,
+      });
+      return {
+        ok: true,
+        summary: `Added "${e.title}" to your schedule for ${formatWhen(p.date, ctx.now)}.`,
+        chip: 'Event added',
+        data: e,
+      };
+    },
+  },
+  {
+    name: 'get_current_time',
+    description: 'Get the current local date and time.',
+    args: {},
+    readOnly: true,
+    async run(_a, ctx) {
+      const d = ctx.now;
+      const text = `${d.toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}, ${d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}`;
+      return { ok: true, summary: `It's ${text}.`, chip: 'Time checked', data: { now: text } };
+    },
+  },
+  {
+    name: 'get_battery',
+    description: 'Get the phone battery level.',
+    args: {},
+    readOnly: true,
+    async run(_a, ctx) {
+      const b = await ctx.platform.device.getBattery();
+      const text = b.level === null ? 'Battery level is unavailable.' : `Battery is at ${b.level}%${b.charging ? ' and charging' : ''}.`;
+      return { ok: true, summary: text, chip: 'Battery checked', data: b };
+    },
+  },
+  {
+    name: 'get_device_info',
+    description: 'Get information about this device.',
+    args: {},
+    readOnly: true,
+    async run(_a, ctx) {
+      const d = ctx.platform.device.getDeviceInfo();
+      const ram = d.totalMemoryBytes ? `, ${(d.totalMemoryBytes / 1073741824).toFixed(1)} GB RAM` : '';
+      return { ok: true, summary: `${d.brand ?? ''} ${d.model ?? 'device'}, ${d.os} ${d.osVersion ?? ''}${ram}.`.trim(), chip: 'Device checked', data: d };
+    },
+  },
+  {
+    name: 'open_app',
+    description: `Open a built-in app. Allowed apps: ${SUPPORTED_APPS.join(', ')}.`,
+    args: { app: { type: 'string', description: 'app name', required: true, enum: SUPPORTED_APPS } },
+    readOnly: false,
+    sensitive: true,
+    async run(a, ctx) {
+      const ok = await ctx.platform.device.openApp(String(a.app));
+      return ok
+        ? { ok: true, summary: `Opened ${a.app}.`, chip: 'App opened' }
+        : fail(`I couldn't open ${a.app} on this device.`);
+    },
+  },
+  {
+    name: 'open_url',
+    description: 'Open a web link (https) in the browser.',
+    args: { url: { type: 'string', description: 'https URL', required: true, maxLength: 500 } },
+    readOnly: false,
+    sensitive: true,
+    async run(a, ctx) {
+      const url = String(a.url);
+      if (!/^https:\/\/[^\s]+$/i.test(url)) {
+        return fail('I can only open https:// links.');
+      }
+      await ctx.platform.device.openUrl(url);
+      return { ok: true, summary: 'Opened the link.', chip: 'Link opened' };
+    },
+  },
+  {
+    name: 'send_notification',
+    description: 'Show a notification on this phone right now.',
+    args: {
+      title: { type: 'string', description: 'title', required: true, maxLength: 100 },
+      body: { type: 'string', description: 'text', required: true, maxLength: 300 },
+    },
+    readOnly: false,
+    async run(a, ctx) {
+      if (!(await ctx.platform.notifications.ensurePermission())) {
+        return fail('Notifications are turned off for Alphadron in system settings.');
+      }
+      await ctx.platform.notifications.showNow(String(a.title), String(a.body));
+      return { ok: true, summary: 'Notification sent.', chip: 'Notification sent' };
+    },
+  },
+];
+
+export const TOOL_MAP = new Map(TOOLS.map(t => [t.name, t]));
