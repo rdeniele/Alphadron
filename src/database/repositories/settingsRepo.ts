@@ -13,11 +13,13 @@ export const defaultSettings: AppSettings = {
 };
 
 export async function loadSettings(): Promise<AppSettings> {
-  const res = await getDb().execute('SELECT key, value FROM settings');
+  const rows = await getDb().getAllAsync<{ key: string; value: string }>(
+    'SELECT key, value FROM settings',
+  );
   const out: Record<string, unknown> = { ...defaultSettings };
-  for (const row of res.rows) {
+  for (const row of rows) {
     try {
-      out[String(row.key)] = JSON.parse(String(row.value));
+      out[row.key] = JSON.parse(row.value);
     } catch {
       // ignore corrupt value, keep default
     }
@@ -26,8 +28,9 @@ export async function loadSettings(): Promise<AppSettings> {
 }
 
 export async function saveSetting<K extends keyof AppSettings>(key: K, value: AppSettings[K]) {
-  await getDb().execute('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)', [
+  await getDb().runAsync(
+    'INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)',
     key,
     JSON.stringify(value),
-  ]);
+  );
 }

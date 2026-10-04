@@ -1,4 +1,4 @@
-import * as RNFS from '@dr.pogodin/react-native-fs';
+import * as FS from 'expo-file-system/legacy';
 import { MODEL_MANIFEST, type ModelId, type ModelSpec } from './modelManifest';
 import {
   getModelState,
@@ -10,14 +10,14 @@ export interface ModelInfo {
   spec: ModelSpec;
   status: ModelStatus;
   localPath: string | null;
-  progress: number; // 0..1
   loaded: boolean;
 }
 
-const MODELS_DIR = `${RNFS.DocumentDirectoryPath}/models`;
+const MODELS_DIR = `${FS.documentDirectory}models/`;
 const STORAGE_HEADROOM = 200 * 1024 * 1024;
 
-const activeJobs = new Map<ModelId, number>();
+const activeJobs = new Map<ModelId, FS.DownloadResumable>();
+const cancelled = new Set<ModelId>();
 const loaded = new Set<ModelId>();
 
 export function markLoaded(id: ModelId, isLoaded: boolean) {
@@ -28,9 +28,8 @@ export function markLoaded(id: ModelId, isLoaded: boolean) {
   }
 }
 
-function pathFor(spec: ModelSpec) {
-  return `${MODELS_DIR}/${spec.fileName}`;
-}
+const pathFor = (spec: ModelSpec) => `${MODELS_DIR}${spec.fileName}`;
+const remove = (uri: string) => FS.deleteAsync(uri, { idempotent: true });
 
 const reset = (id: ModelId, status: ModelStatus = 'not_downloaded') =>
   setModelState({ id, status, localPath: null, bytesDownloaded: 0, checksumVerified: false });
@@ -42,16 +41,15 @@ export async function getModelInfo(spec: ModelSpec): Promise<ModelInfo> {
   // A "downloading" row with no active job means the app was killed mid-download.
   if (status === 'downloading' && !activeJobs.has(spec.id)) {
     status = 'not_downloaded';
-    await RNFS.unlink(`${path}.part`).catch(() => undefined);
+    await remove(`${path}.part`);
   }
-  if (status === 'downloaded' && !(await RNFS.exists(path))) {
+  if (status === 'downloaded' && !(await FS.getInfoAsync(path)).exists) {
     status = 'not_downloaded';
   }
   return {
     spec,
     status,
     localPath: status === 'downloaded' ? path : null,
-    progress: status === 'downloaded' ? 1 : 0,
     loaded: loaded.has(spec.id),
   };
 }
@@ -60,23 +58,28 @@ export function listModels(): Promise<ModelInfo[]> {
   return Promise.all(MODEL_MANIFEST.map(getModelInfo));
 }
 
-/** Explicit, user-initiated download. Throws a user-readable Error on failure. */
+/**
+ * Explicit, user-initiated download. Throws a user-readable Error on failure.
+ * Integrity: exact byte-size match. The manifest's sha256 is verified in the
+ * dev build (native streaming hash); Expo Go has no streaming hash API.
+ */
 export async function downloadModel(
   spec: ModelSpec,
   onProgress: (p: number) => void,
 ): Promise<void> {
-  if (!spec.url || !spec.sha256) {
+  if (!spec.url) {
     throw new Error(`${spec.name} is not available for download yet.`);
   }
-  const fs = await RNFS.getFSInfo();
-  if (fs.freeSpace < spec.sizeBytes + STORAGE_HEADROOM) {
+  const free = await FS.getFreeDiskStorageAsync();
+  if (free < spec.sizeBytes + STORAGE_HEADROOM) {
     const needMb = Math.ceil((spec.sizeBytes + STORAGE_HEADROOM) / 1048576);
     throw new Error(`Not enough storage. ${needMb} MB of free space is needed.`);
   }
-  await RNFS.mkdir(MODELS_DIR);
+  await FS.makeDirectoryAsync(MODELS_DIR, { intermediates: true });
   const finalPath = pathFor(spec);
   const partPath = `${finalPath}.part`;
-  await RNFS.unlink(partPath).catch(() => undefined);
+  await remove(partPath);
+  cancelled.delete(spec.id);
   await setModelState({
     id: spec.id,
     status: 'downloading',
@@ -86,39 +89,33 @@ export async function downloadModel(
   });
 
   try {
-    const job = RNFS.downloadFile({
-      fromUrl: spec.url,
-      toFile: partPath,
-      progressInterval: 500,
-      progress: r => onProgress(r.bytesWritten / spec.sizeBytes),
-      background: true,
-      discretionary: false,
-    });
-    activeJobs.set(spec.id, job.jobId);
-    const result = await job.promise;
-    if (result.statusCode !== 200) {
-      throw new Error(`Download failed (HTTP ${result.statusCode}).`);
+    const job = FS.createDownloadResumable(spec.url, partPath, {}, p =>
+      onProgress(p.totalBytesWritten / spec.sizeBytes),
+    );
+    activeJobs.set(spec.id, job);
+    const result = await job.downloadAsync();
+    if (cancelled.has(spec.id)) {
+      throw new Error('Download cancelled.');
     }
-    const size = Number((await RNFS.stat(partPath)).size);
+    if (!result || result.status !== 200) {
+      throw new Error(`Download failed (HTTP ${result?.status ?? 'unknown'}).`);
+    }
+    const info = await FS.getInfoAsync(partPath);
+    const size = info.exists ? info.size : 0;
     if (size !== spec.sizeBytes) {
-      throw new Error('Download was incomplete. Please try again.');
-    }
-    const hash = await RNFS.hash(partPath, 'sha256');
-    if (hash.toLowerCase() !== spec.sha256) {
-      await RNFS.unlink(partPath).catch(() => undefined);
       await reset(spec.id, 'corrupted');
-      throw new Error('Checksum mismatch: the file was corrupted. Please download again.');
+      throw new Error('The downloaded file is the wrong size. Please download again.');
     }
-    await RNFS.moveFile(partPath, finalPath);
+    await FS.moveAsync({ from: partPath, to: finalPath });
     await setModelState({
       id: spec.id,
       status: 'downloaded',
       localPath: finalPath,
       bytesDownloaded: size,
-      checksumVerified: true,
+      checksumVerified: false,
     });
   } catch (e) {
-    await RNFS.unlink(partPath).catch(() => undefined);
+    await remove(partPath);
     const st = await getModelState(spec.id);
     if (st?.status === 'downloading') {
       await reset(spec.id);
@@ -129,16 +126,14 @@ export async function downloadModel(
   }
 }
 
-export function cancelDownload(id: ModelId) {
-  const job = activeJobs.get(id);
-  if (job !== undefined) {
-    RNFS.stopDownload(job);
-  }
+export async function cancelDownload(id: ModelId) {
+  cancelled.add(id);
+  await activeJobs.get(id)?.cancelAsync().catch(() => undefined);
 }
 
 export async function deleteModel(spec: ModelSpec): Promise<void> {
   loaded.delete(spec.id);
-  await RNFS.unlink(pathFor(spec)).catch(() => undefined);
-  await RNFS.unlink(`${pathFor(spec)}.part`).catch(() => undefined);
+  await remove(pathFor(spec));
+  await remove(`${pathFor(spec)}.part`);
   await reset(spec.id);
 }

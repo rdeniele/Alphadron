@@ -46,7 +46,7 @@ src/platform/{android,windows}   // behind interfaces: DeviceService, Notificati
 Interfaces (`AIProvider`, `STTEngine`, `TTSEngine`, `DeviceService`) live in `core/`. Implementations are platform-specific.
 
 ## Plan
-- **Phase 2** (next): RN 0.80-compatible scaffold (TS), navigation, theme (light/dark), `op-sqlite` + migrations for all listed entities, settings, model manager (manifest, resumable download, checksum, storage check, delete/redownload), offline state.
+- **Phase 2** (done): Expo SDK 57 scaffold, expo-sqlite migrations, theme, navigation, settings, model manager. Switched from bare RN to Expo so it can be tested in Expo Go; Phase 3 native AI modules need an EAS dev build.
 - **Phase 3:** `llama.rn`, `whisper.rn`, `react-native-sherpa-onnx` behind abstractions; each tested independently on a physical Android device. Emulators are not representative for inference speed.
 - **Phases 4-9** as specified. Windows native modules are scheduled after the Android MVP.
 

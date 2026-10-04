@@ -10,24 +10,36 @@ export interface ModelStateRow {
   checksumVerified: boolean;
 }
 
+interface Row {
+  id: string;
+  status: ModelStatus;
+  local_path: string | null;
+  bytes_downloaded: number;
+  checksum_verified: number;
+}
+
 export async function getModelState(id: string): Promise<ModelStateRow | null> {
-  const res = await getDb().execute('SELECT * FROM model_state WHERE id = ?', [id]);
-  const r = res.rows[0];
+  const r = await getDb().getFirstAsync<Row>('SELECT * FROM model_state WHERE id = ?', id);
   if (!r) {
     return null;
   }
   return {
-    id: String(r.id),
-    status: r.status as ModelStatus,
-    localPath: r.local_path ? String(r.local_path) : null,
-    bytesDownloaded: Number(r.bytes_downloaded),
-    checksumVerified: Number(r.checksum_verified) === 1,
+    id: r.id,
+    status: r.status,
+    localPath: r.local_path,
+    bytesDownloaded: r.bytes_downloaded,
+    checksumVerified: r.checksum_verified === 1,
   };
 }
 
 export async function setModelState(s: ModelStateRow) {
-  await getDb().execute(
+  await getDb().runAsync(
     'INSERT OR REPLACE INTO model_state (id, status, local_path, bytes_downloaded, checksum_verified, updated_at) VALUES (?,?,?,?,?,?)',
-    [s.id, s.status, s.localPath, s.bytesDownloaded, s.checksumVerified ? 1 : 0, Date.now()],
+    s.id,
+    s.status,
+    s.localPath,
+    s.bytesDownloaded,
+    s.checksumVerified ? 1 : 0,
+    Date.now(),
   );
 }
