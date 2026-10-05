@@ -7,9 +7,9 @@ import { KokoroTtsService, type TextToSpeechService } from './voice/TextToSpeech
 import { confirmAction } from './permissions/confirm';
 import { platform } from '../platform';
 
-export type Phase = 'idle' | 'listening' | 'transcribing' | 'loading' | 'thinking' | 'acting' | 'speaking';
+export type Phase = 'idle' | 'listening' | 'transcribing' | 'checking' | 'loading' | 'thinking' | 'acting' | 'speaking';
 
-const LOW_MEMORY_BYTES = 5.5 * 1024 ** 3;
+const LOW_MEMORY_BYTES = 4 * 1024 ** 3;
 
 /**
  * Owns the three engines and the memory policy.
@@ -34,6 +34,14 @@ export class Runtime {
     return (Device.totalMemory ?? 0) < LOW_MEMORY_BYTES;
   }
 
+  /** Loads Qwen in the background so the first model-answered message isn't slow. */
+  async warmUp(): Promise<void> {
+    if (this.busy || this.provider.isLoaded()) {
+      return;
+    }
+    await this.provider.load().catch(() => undefined);
+  }
+
   /** Text chat. Optionally speaks the reply (when voice output is wanted). */
   async sendText(text: string, opts: { memoryEnabled: boolean; speak: boolean }): Promise<TurnResult> {
     if (this.busy) {
@@ -47,7 +55,7 @@ export class Runtime {
         ctx: { platform, memoryEnabled: opts.memoryEnabled, confirm: confirmAction },
         onStatus: s => this.setPhase(s),
       });
-      if (this.lowMemory) {
+      if (this.lowMemory && opts.speak) {
         await this.provider.unload(); // free RAM before loading TTS
       }
       if (opts.speak && (await this.tts.isReady())) {

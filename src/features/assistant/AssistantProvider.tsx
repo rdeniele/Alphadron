@@ -20,6 +20,8 @@ interface AssistantCtx {
   stopSpeaking: () => Promise<void>;
   newChat: () => Promise<void>;
   reload: () => Promise<void>;
+  /** Call after any data change made outside the assistant (manual add/edit). */
+  refresh: () => void;
 }
 
 const Ctx = createContext<AssistantCtx>(null as unknown as AssistantCtx);
@@ -43,7 +45,10 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     runtime.onPhase = setPhase;
     reload();
+    // Preload the model shortly after launch so the first model answer isn't slow.
+    const warm = setTimeout(() => runtime.warmUp(), 1500);
     return () => {
+      clearTimeout(warm);
       runtime.onPhase = undefined;
     };
   }, [reload]);
@@ -115,6 +120,10 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
   }, [releaseTalk]);
 
   const stopSpeaking = useCallback(() => runtime.stopSpeaking(), []);
+  const refresh = useCallback(() => {
+    setDataVersion(v => v + 1);
+    reload();
+  }, [reload]);
 
   const newChat = useCallback(async () => {
     await createConversation('Chat');
@@ -122,8 +131,8 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
   }, [reload]);
 
   const value = useMemo(
-    () => ({ messages, phase, error, dataVersion, send, pressTalk, releaseTalk, stopSpeaking, newChat, reload }),
-    [messages, phase, error, dataVersion, send, pressTalk, releaseTalk, stopSpeaking, newChat, reload],
+    () => ({ messages, phase, error, dataVersion, send, pressTalk, releaseTalk, stopSpeaking, newChat, reload, refresh }),
+    [messages, phase, error, dataVersion, send, pressTalk, releaseTalk, stopSpeaking, newChat, reload, refresh],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
@@ -134,8 +143,9 @@ export const PHASE_LABEL: Record<Phase, string> = {
   idle: '',
   listening: 'Listening… release to send',
   transcribing: 'Transcribing…',
-  loading: 'Loading the AI model…',
+  checking: 'Checking…',
+  loading: 'Waking up the AI…',
   thinking: 'Thinking…',
-  acting: 'Working on it…',
+  acting: 'Saving…',
   speaking: 'Speaking…',
 };

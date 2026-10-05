@@ -13,6 +13,17 @@ const fail = (summary: string): ToolResult => ({ ok: false, summary, chip: 'Coul
 const num = (v: unknown) => (typeof v === 'number' ? v : undefined);
 const str = (v: unknown) => (typeof v === 'string' ? v : undefined);
 
+function dayLabel(d: Date, now: Date): string {
+  const diff = Math.round((startOfLocalDay(d) - startOfLocalDay(now)) / 86400000);
+  if (diff === 0) {
+    return 'today';
+  }
+  if (diff === 1) {
+    return 'tomorrow';
+  }
+  return d.toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' });
+}
+
 const PRIORITY: Record<string, number> = { high: 1, normal: 2, low: 3 };
 
 export const TOOLS: Tool[] = [
@@ -215,14 +226,52 @@ export const TOOLS: Tool[] = [
         isToday ? tasks.listTasks({ status: 'open', dueBefore: from - 1 }) : Promise.resolve([]),
       ]);
       const time = (ms: number) => formatWhen(new Date(ms), ctx.now).replace(/^.* at /, '');
+      const timed = [
+        ...rems.map(r => ({ at: r.triggerAt, item: { kind: 'reminder' as const, title: r.title, time: time(r.triggerAt) } })),
+        ...evs.map(e => ({ at: e.startsAt, item: { kind: 'event' as const, title: e.title, time: time(e.startsAt) } })),
+      ]
+        .sort((x, y) => x.at - y.at)
+        .map(x => x.item);
+      const taskItems = dueTasks
+        .filter(t => t.dueAt! >= from)
+        .map(t => ({ kind: 'task' as const, title: t.title }));
       const data = {
-        day: formatWhen(new Date(from + 1), ctx.now).replace(/ at .*/, ''),
-        tasks_due: dueTasks.filter(t => t.dueAt! >= from).map(t => ({ title: t.title })),
-        overdue_tasks: overdue.map(t => ({ title: t.title })),
-        reminders: rems.map(r => ({ title: r.title, time: time(r.triggerAt) })),
-        events: evs.map(e => ({ title: e.title, time: time(e.startsAt) })),
+        label: dayLabel(new Date(from + 1), ctx.now),
+        items: [...timed, ...taskItems],
+        overdue: overdue.map(t => t.title),
       };
       return { ok: true, summary: 'Schedule retrieved.', chip: 'Schedule checked', data };
+    },
+  },
+  {
+    name: 'list_reminders',
+    description: "List the user's upcoming reminders.",
+    args: {},
+    readOnly: true,
+    async run(_a, ctx) {
+      const list = await reminders.listReminders({ from: ctx.now.getTime() - 60000 });
+      const data = list.map(r => ({ title: r.title, when: formatWhen(new Date(r.triggerAt), ctx.now) }));
+      return { ok: true, summary: `${list.length} reminder(s).`, chip: 'Reminders checked', data };
+    },
+  },
+  {
+    name: 'suggest_focus',
+    description: 'Suggest what the user should work on now, from their real tasks and schedule.',
+    args: {},
+    readOnly: true,
+    async run(_a, ctx) {
+      const from = startOfLocalDay(ctx.now);
+      const to = endOfLocalDay(ctx.now);
+      const open = await tasks.listTasks({ status: 'open' });
+      const overdue = open.filter(t => t.dueAt !== null && t.dueAt < from).map(t => t.title);
+      const today = open.filter(t => t.dueAt !== null && t.dueAt >= from && t.dueAt <= to).map(t => t.title);
+      const next = open.filter(t => t.dueAt === null || t.dueAt > to).slice(0, 3).map(t => t.title);
+      return {
+        ok: true,
+        summary: 'Focus suggestion.',
+        chip: 'Plan suggested',
+        data: { overdue, today, next, openCount: open.length },
+      };
     },
   },
   {

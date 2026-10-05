@@ -10,6 +10,15 @@ const toPath = (uri: string) => uri.replace(/^file:\/\//, '');
 
 export type SttState = 'idle' | 'listening' | 'transcribing';
 
+/** AudioRecord.stop() returns a promise on some platforms and undefined on others. */
+async function stopRecorder(): Promise<void> {
+  try {
+    await Promise.resolve(AudioRecord.stop());
+  } catch {
+    // already stopped
+  }
+}
+
 function base64ToBytes(b64: string): Uint8Array {
   const bin = atob(b64);
   const out = new Uint8Array(bin.length);
@@ -122,7 +131,7 @@ export class SpeechToTextService {
       clearTimeout(this.autoStop);
       this.autoStop = null;
     }
-    await AudioRecord.stop().catch(() => undefined);
+    await stopRecorder();
     this.set('transcribing');
     try {
       const seconds = this.bytes / 2 / SAMPLE_RATE;
@@ -147,7 +156,7 @@ export class SpeechToTextService {
       this.autoStop = null;
     }
     if (this.state === 'listening') {
-      await AudioRecord.stop().catch(() => undefined);
+      await stopRecorder();
     }
     this.chunks = [];
     this.set('idle');

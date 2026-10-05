@@ -1,7 +1,9 @@
 import type { AIProvider, ChatTurn } from './AIProvider';
 import { parseModelAction } from './parseOutput';
 import { buildResponseSchema, buildSystemPrompt } from './prompt';
+import { claimsAction, fastPath } from './fastPath';
 import { executeTool, type ExecutedTool } from '../tools/executor';
+import { formatReadResult } from '../tools/format';
 import { TOOLS } from '../tools/tools';
 import type { ToolContext } from '../tools/types';
 import { searchMemories } from '../../database/repositories/memoriesRepo';
@@ -18,25 +20,61 @@ export interface TurnResult {
   userMessage: ChatMessage;
   assistantMessage: ChatMessage;
   action: ExecutedTool | null;
+  /** True when the instant rule-based path answered (no model was used). */
+  instant: boolean;
 }
+
+export type TurnStatus = 'checking' | 'loading' | 'thinking' | 'acting';
 
 export interface TurnDeps {
   provider: AIProvider;
   ctx: Omit<ToolContext, 'now'>;
-  onStatus?: (status: 'loading' | 'thinking' | 'acting') => void;
+  onStatus?: (status: TurnStatus) => void;
 }
 
 const schemaCache = buildResponseSchema(TOOLS);
 
+const NOT_DONE_NOTE =
+  "I couldn't set that up. Try something like \"Remind me tomorrow at 9 AM to call John\", or use the + button to add it yourself.";
+
+function replyFromAction(action: ExecutedTool): string {
+  if (action.readOnly && action.result.ok && action.result.data !== undefined) {
+    return formatReadResult(action.tool, action.result.data) ?? action.result.summary;
+  }
+  return action.result.summary;
+}
+
 /**
- * One full assistant turn: text -> local model -> tool/reply -> SQLite -> response.
- * Conversation history is stored; "permanent memory" is only written via save_memory.
+ * One full assistant turn. Common commands (reminders, tasks, notes, "what do I have
+ * tomorrow") are answered instantly by rules + SQLite. Everything else goes to the
+ * local model. History is stored; permanent memory is only written via save_memory.
  */
 export async function runTurn(userText: string, deps: TurnDeps): Promise<TurnResult> {
   const now = new Date();
   const convId = await currentConversationId();
   const userMessage = await addMessage(convId, 'user', userText);
 
+  const finish = async (reply: string, action: ExecutedTool | null, instant: boolean): Promise<TurnResult> => {
+    const toolJson = action
+      ? JSON.stringify({ tool: action.tool, ok: action.result.ok, chip: action.result.chip })
+      : null;
+    const assistantMessage = await addMessage(convId, 'assistant', reply, toolJson);
+    return { userMessage, assistantMessage, action, instant };
+  };
+
+  // ---- Instant path: no model needed ----
+  deps.onStatus?.('checking');
+  const fast = fastPath(userText);
+  if (fast?.kind === 'reply') {
+    return finish(fast.text, null, true);
+  }
+  if (fast?.kind === 'tool') {
+    deps.onStatus?.('acting');
+    const action = await executeTool(fast.tool, fast.args, { ...deps.ctx, now });
+    return finish(replyFromAction(action), action, true);
+  }
+
+  // ---- Model path ----
   const history = (await listMessages(convId, 8))
     .filter(m => (m.role === 'user' || m.role === 'assistant') && m.id !== userMessage.id)
     .slice(-6)
@@ -57,43 +95,26 @@ export async function runTurn(userText: string, deps: TurnDeps): Promise<TurnRes
   });
   const messages: ChatTurn[] = [{ role: 'system', content: system }, ...history, { role: 'user', content: userText }];
 
-  deps.onStatus?.('loading');
+  if (!deps.provider.isLoaded()) {
+    deps.onStatus?.('loading');
+  }
   await deps.provider.load();
   deps.onStatus?.('thinking');
 
-  let replyText: string;
-  let action: ExecutedTool | null = null;
-
-  const raw = await deps.provider.generateJson(messages, schemaCache);
+  const raw = await deps.provider.generateJson(messages, schemaCache, { maxTokens: 200 });
   const parsed = parseModelAction(raw);
 
   if (!parsed) {
-    replyText = (await deps.provider.generateText(messages)) || "Sorry, I didn't understand that.";
-  } else if (parsed.kind === 'reply') {
-    replyText = parsed.reply.trim() || "I'm not sure how to help with that.";
-  } else {
-    deps.onStatus?.('acting');
-    action = await executeTool(parsed.tool, parsed.arguments, { ...deps.ctx, now });
-    if (action.readOnly && action.result.ok && action.result.data !== undefined) {
-      // Second pass: phrase the answer using the real data, not the model's guess.
-      const followUp: ChatTurn[] = [
-        ...messages,
-        { role: 'assistant', content: raw },
-        {
-          role: 'user',
-          content: `Tool result (real data from the user's device): ${JSON.stringify(action.result.data)}\nAnswer my original question in 1-3 short sentences using only this data. If it is empty, say so.`,
-        },
-      ];
-      deps.onStatus?.('thinking');
-      replyText = (await deps.provider.generateText(followUp)) || action.result.summary;
-    } else {
-      replyText = action.result.summary;
-    }
+    const text = (await deps.provider.generateText(messages, { maxTokens: 160 })) || "Sorry, I didn't understand that.";
+    return finish(claimsAction(text) ? NOT_DONE_NOTE : text, null, false);
+  }
+  if (parsed.kind === 'reply') {
+    const text = parsed.reply.trim() || "I'm not sure how to help with that.";
+    // A model that says "Done, I set a reminder" without calling a tool did nothing.
+    return finish(claimsAction(text) ? NOT_DONE_NOTE : text, null, false);
   }
 
-  const toolJson = action
-    ? JSON.stringify({ tool: action.tool, ok: action.result.ok, chip: action.result.chip })
-    : null;
-  const assistantMessage = await addMessage(convId, 'assistant', replyText, toolJson);
-  return { userMessage, assistantMessage, action };
+  deps.onStatus?.('acting');
+  const action = await executeTool(parsed.tool, parsed.arguments, { ...deps.ctx, now });
+  return finish(replyFromAction(action), action, false);
 }
