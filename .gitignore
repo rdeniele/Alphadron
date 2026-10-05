@@ -82,3 +82,9 @@ models/
 
 .expo/
 dist/
+
+# Generated native project & build output
+/android/
+build-android*.log
+release/
+*.apk
