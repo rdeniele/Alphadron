@@ -62,6 +62,60 @@ export function listModels(): Promise<ModelInfo[]> {
   return Promise.all(MODEL_MANIFEST.map(getModelInfo));
 }
 
+const MAX_ATTEMPTS = 8;
+const sleep = (ms: number) => new Promise<void>(r => setTimeout(r, ms));
+
+/**
+ * Downloads to partPath, retrying dropped connections. After a failure the next
+ * attempt resumes from the bytes already on disk (HTTP Range), so a flaky
+ * connection never restarts a large download from zero.
+ */
+async function fetchWithResume(
+  spec: ModelSpec,
+  partPath: string,
+  onProgress: (p: number) => void,
+): Promise<void> {
+  let lastError: unknown = null;
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    if (cancelled.has(spec.id)) {
+      return;
+    }
+    const info = await FS.getInfoAsync(partPath);
+    const have = info.exists ? info.size : 0;
+    if (have === spec.sizeBytes) {
+      return;
+    }
+    const job = FS.createDownloadResumable(
+      spec.url!,
+      partPath,
+      {},
+      p => onProgress(p.totalBytesWritten / spec.sizeBytes),
+      have > 0 ? String(have) : undefined,
+    );
+    activeJobs.set(spec.id, job);
+    try {
+      const result = have > 0 ? await job.resumeAsync() : await job.downloadAsync();
+      if (cancelled.has(spec.id)) {
+        return;
+      }
+      if (result && (result.status === 200 || result.status === 206)) {
+        return;
+      }
+      lastError = new Error(`HTTP ${result?.status ?? 'unknown'}`);
+    } catch (e) {
+      if (cancelled.has(spec.id)) {
+        return;
+      }
+      lastError = e;
+    }
+    await sleep(Math.min(2000 * attempt, 10000));
+  }
+  const detail = lastError instanceof Error ? lastError.message : String(lastError);
+  throw new Error(
+    `The connection kept dropping (${detail}). Your progress is not saved between launches; try again on a steadier Wi-Fi connection.`,
+  );
+}
+
 /**
  * Explicit, user-initiated download. Throws a user-readable Error on failure.
  * Integrity: exact byte-size match. The manifest's sha256 is verified in the
@@ -93,16 +147,9 @@ export async function downloadModel(
   });
 
   try {
-    const job = FS.createDownloadResumable(spec.url, partPath, {}, p =>
-      onProgress(p.totalBytesWritten / spec.sizeBytes),
-    );
-    activeJobs.set(spec.id, job);
-    const result = await job.downloadAsync();
+    await fetchWithResume(spec, partPath, onProgress);
     if (cancelled.has(spec.id)) {
       throw new Error('Download cancelled.');
-    }
-    if (!result || result.status !== 200) {
-      throw new Error(`Download failed (HTTP ${result?.status ?? 'unknown'}).`);
     }
     const info = await FS.getInfoAsync(partPath);
     const size = info.exists ? info.size : 0;
