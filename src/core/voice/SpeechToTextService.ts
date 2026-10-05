@@ -1,12 +1,16 @@
 import { PermissionsAndroid, Platform } from 'react-native';
 import AudioRecord from '@fugood/react-native-audio-pcm-stream';
 import { initWhisper, type WhisperContext } from 'whisper.rn/index';
-import { MODEL_MANIFEST } from '../ai/modelManifest';
+import { MODEL_MANIFEST, type ModelId } from '../ai/modelManifest';
 import { getModelInfo, markLoaded } from '../ai/modelManager';
+import { SAMPLE_RATE, base64ToBytes, chunkLevel, cleanTranscript, pcm16ToFloat32, prepareAudio } from './audioUtils';
 
-const SAMPLE_RATE = 16000;
-const MAX_SECONDS = 30;
+const MAX_SECONDS = 120;
 const toPath = (uri: string) => uri.replace(/^file:\/\//, '');
+
+/** Words the user is likely to say; nudges Whisper toward them (fewer "remind me" -> "remain me" errors). */
+const VOCAB_PROMPT =
+  'Alphadex, remind me tomorrow at 9 AM to work on my project. Add a task. Create a note. What do I have today? Schedule a meeting on Friday at 3 PM.';
 
 export type SttState = 'idle' | 'listening' | 'transcribing';
 
@@ -19,44 +23,9 @@ async function stopRecorder(): Promise<void> {
   }
 }
 
-function base64ToBytes(b64: string): Uint8Array {
-  const bin = atob(b64);
-  const out = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) {
-    out[i] = bin.charCodeAt(i);
-  }
-  return out;
-}
-
-/** 16-bit little-endian PCM chunks -> float32 samples in [-1, 1]. */
-function pcm16ToFloat32(chunks: Uint8Array[]): Float32Array {
-  let bytes = 0;
-  for (const c of chunks) {
-    bytes += c.length;
-  }
-  const samples = new Float32Array(Math.floor(bytes / 2));
-  let i = 0;
-  let carry = -1;
-  for (const c of chunks) {
-    for (let j = 0; j < c.length; j++) {
-      if (carry < 0) {
-        carry = c[j];
-      } else {
-        let v = carry | (c[j] << 8);
-        if (v & 0x8000) {
-          v -= 0x10000;
-        }
-        samples[i++] = v / 32768;
-        carry = -1;
-      }
-    }
-  }
-  return samples;
-}
-
 /**
- * Push-to-talk speech recognition using Whisper (whisper.cpp) on-device.
- * The microphone is only open between startListening() and stopAndTranscribe().
+ * Tap-to-record speech recognition using Whisper (whisper.cpp) on-device.
+ * The microphone is open only between startListening() and stopAndTranscribe()/cancel().
  * Whisper is loaded for the transcription and released afterwards to save RAM.
  */
 export class SpeechToTextService {
@@ -67,7 +36,9 @@ export class SpeechToTextService {
   private ctx: WhisperContext | null = null;
   state: SttState = 'idle';
   onStateChange?: (s: SttState) => void;
-  /** Fired if the recording hit the maximum length and stopped by itself. */
+  /** Live input loudness 0..1 while recording (drives the level meter). */
+  onLevel?: (level: number) => void;
+  /** Fired if the recording hit the maximum length. */
   onAutoStop?: () => void;
 
   private set(s: SttState) {
@@ -81,16 +52,26 @@ export class SpeechToTextService {
     }
     const res = await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.RECORD_AUDIO, {
       title: 'Microphone',
-      message: 'Alphadron uses the microphone only while you hold the talk button. Audio stays on your phone.',
+      message: 'Alphadron uses the microphone only while you are recording. Audio stays on your phone.',
       buttonPositive: 'Allow',
       buttonNegative: 'Deny',
     });
     return res === PermissionsAndroid.RESULTS.GRANTED;
   }
 
+  /** Prefers the more accurate "small" model when it has been downloaded. */
+  private async resolveModel(): Promise<{ id: ModelId; path: string } | null> {
+    for (const id of ['whisper_small', 'whisper'] as ModelId[]) {
+      const info = await getModelInfo(MODEL_MANIFEST.find(m => m.id === id)!);
+      if (info.status === 'downloaded' && info.localPath) {
+        return { id, path: info.localPath };
+      }
+    }
+    return null;
+  }
+
   async isReady(): Promise<boolean> {
-    const info = await getModelInfo(MODEL_MANIFEST.find(m => m.id === 'whisper')!);
-    return info.status === 'downloaded';
+    return (await this.resolveModel()) !== null;
   }
 
   async startListening(): Promise<void> {
@@ -114,6 +95,7 @@ export class SpeechToTextService {
         const bytes = base64ToBytes(b64);
         this.chunks.push(bytes);
         this.bytes += bytes.length;
+        this.onLevel?.(chunkLevel(bytes));
       });
       this.wired = true;
     }
@@ -135,15 +117,22 @@ export class SpeechToTextService {
     this.set('transcribing');
     try {
       const seconds = this.bytes / 2 / SAMPLE_RATE;
-      if (seconds < 0.4) {
+      if (seconds < 0.5) {
         return '';
       }
-      const samples = pcm16ToFloat32(this.chunks);
+      const samples = prepareAudio(pcm16ToFloat32(this.chunks));
       this.chunks = [];
       const ctx = await this.loadWhisper();
-      const { promise } = ctx.transcribeData(samples.buffer as ArrayBuffer, { language: 'en' });
+      const { promise } = ctx.transcribeData(samples.buffer as ArrayBuffer, {
+        language: 'en',
+        translate: false,
+        temperature: 0,
+        beamSize: 3,
+        prompt: VOCAB_PROMPT,
+        maxThreads: 4,
+      });
       const res = await promise;
-      return res.result.replace(/\[[^\]]*\]|\([^)]*\)/g, '').replace(/\s+/g, ' ').trim();
+      return cleanTranscript(res.result);
     } finally {
       await this.release();
       this.set('idle');
@@ -159,6 +148,7 @@ export class SpeechToTextService {
       await stopRecorder();
     }
     this.chunks = [];
+    this.bytes = 0;
     this.set('idle');
   }
 
@@ -166,12 +156,12 @@ export class SpeechToTextService {
     if (this.ctx) {
       return this.ctx;
     }
-    const info = await getModelInfo(MODEL_MANIFEST.find(m => m.id === 'whisper')!);
-    if (!info.localPath) {
+    const found = await this.resolveModel();
+    if (!found) {
       throw new Error('The speech model is not downloaded yet.');
     }
-    this.ctx = await initWhisper({ filePath: toPath(info.localPath) });
-    markLoaded('whisper', true);
+    this.ctx = await initWhisper({ filePath: toPath(found.path) });
+    markLoaded(found.id, true);
     return this.ctx;
   }
 
@@ -179,6 +169,7 @@ export class SpeechToTextService {
     const c = this.ctx;
     this.ctx = null;
     markLoaded('whisper', false);
+    markLoaded('whisper_small', false);
     await c?.release().catch(() => undefined);
   }
 }

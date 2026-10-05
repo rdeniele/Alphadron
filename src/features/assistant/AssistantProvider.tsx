@@ -15,8 +15,10 @@ interface AssistantCtx {
   /** Increments whenever an action may have changed tasks/reminders/etc., so screens can refresh. */
   dataVersion: number;
   send: (text: string, speak?: boolean) => Promise<void>;
-  pressTalk: () => Promise<void>;
-  releaseTalk: () => Promise<void>;
+  /** Tap-to-record flow: start -> (cancel | finish & send). */
+  startRecording: () => Promise<void>;
+  finishRecording: () => Promise<void>;
+  cancelRecording: () => Promise<void>;
   stopSpeaking: () => Promise<void>;
   newChat: () => Promise<void>;
   reload: () => Promise<void>;
@@ -82,7 +84,7 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
     [reload],
   );
 
-  const pressTalk = useCallback(async () => {
+  const startRecording = useCallback(async () => {
     setError(null);
     const p = (async () => {
       try {
@@ -95,8 +97,8 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
     await p;
   }, []);
 
-  const releaseTalk = useCallback(async () => {
-    // A quick tap can release before the mic finished starting (e.g. permission prompt).
+  const finishRecording = useCallback(async () => {
+    // Done can be tapped before the mic finished starting (e.g. permission prompt).
     await starting.current;
     starting.current = null;
     if (runtime.stt.state !== 'listening') {
@@ -107,22 +109,28 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
       if (text) {
         await send(text, true);
       } else {
-        setError("I didn't catch that. Hold the button while you speak.");
+        setError("I didn't catch anything. Tap the mic, speak clearly, then tap Done.");
       }
     } catch (e) {
       setError((e as Error).message);
     }
   }, [send]);
 
-  // Hitting the 30 s recording cap behaves like releasing the button.
+  // Hitting the maximum recording length behaves like tapping Done.
   useEffect(() => {
     runtime.stt.onAutoStop = () => {
-      releaseTalk();
+      finishRecording();
     };
     return () => {
       runtime.stt.onAutoStop = undefined;
     };
-  }, [releaseTalk]);
+  }, [finishRecording]);
+
+  const cancelRecording = useCallback(async () => {
+    await starting.current;
+    starting.current = null;
+    await runtime.cancelTalking();
+  }, []);
 
   const stopSpeaking = useCallback(() => runtime.stopSpeaking(), []);
   const refresh = useCallback(() => {
@@ -136,8 +144,8 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
   }, [reload]);
 
   const value = useMemo(
-    () => ({ messages, phase, error, dataVersion, send, pressTalk, releaseTalk, stopSpeaking, newChat, reload, refresh }),
-    [messages, phase, error, dataVersion, send, pressTalk, releaseTalk, stopSpeaking, newChat, reload, refresh],
+    () => ({ messages, phase, error, dataVersion, send, startRecording, finishRecording, cancelRecording, stopSpeaking, newChat, reload, refresh }),
+    [messages, phase, error, dataVersion, send, startRecording, finishRecording, cancelRecording, stopSpeaking, newChat, reload, refresh],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

@@ -3,6 +3,7 @@ import { Pressable, Text, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { Check, ChatCircleText, CircleDashed, Plus, WarningCircle } from 'phosphor-react-native';
 import { TalkButton } from './TalkButton';
+import { RecordingBar } from './RecordingBar';
 import { useAssistant } from './AssistantProvider';
 import { useQuickAdd } from '../common/QuickAdd';
 import { Card, Chip, Empty, Row, Screen, SectionTitle, fmtTime, useLayout } from '../../components/ui';
@@ -246,6 +247,16 @@ export function HomeScreen() {
 function HomeDock({ onAdd, onChat, error }: { onAdd: () => void; onChat: () => void; error: string | null }) {
   const t = useTheme();
   const { maxWidth } = useLayout();
+  const { phase } = useAssistant();
+  if (phase === 'listening') {
+    return (
+      <View style={{ alignItems: 'center', paddingVertical: 12, paddingHorizontal: 14 }}>
+        <View style={{ width: '100%', maxWidth }}>
+          <RecordingBar size={64} />
+        </View>
+      </View>
+    );
+  }
   return (
     <View style={{ alignItems: 'center', paddingTop: 10, paddingBottom: 10 }}>
       {error ? <Text style={{ color: t.danger, textAlign: 'center', paddingHorizontal: 20, marginBottom: 6 }}>{error}</Text> : null}

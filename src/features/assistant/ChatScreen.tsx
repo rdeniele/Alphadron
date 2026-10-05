@@ -24,6 +24,7 @@ import {
 } from 'phosphor-react-native';
 import { PHASE_LABEL, useAssistant } from './AssistantProvider';
 import { TalkButton } from './TalkButton';
+import { RecordingBar } from './RecordingBar';
 import { useQuickAdd, type AddMode } from '../common/QuickAdd';
 import { Chip, Row, Sheet, useLayout } from '../../components/ui';
 import { useTheme } from '../../theme';
@@ -250,48 +251,47 @@ export function ChatScreen() {
 
         <View style={[s.barWrap, { borderTopColor: t.border, backgroundColor: t.bg }]}>
           <View style={[s.bar, { maxWidth: contentMax, paddingHorizontal: gutter - 6 }]}>
-            <Pressable
-              onPress={() => {
-                Keyboard.dismiss();
-                setMenu(true);
-              }}
-              accessibilityRole="button"
-              accessibilityLabel="More actions"
-              style={[s.round, { backgroundColor: t.surface, borderColor: t.border, borderWidth: 1 }]}>
-              <Plus size={22} color={t.accent} weight="bold" />
-            </Pressable>
-
             {listening ? (
-              <View style={[s.input, { borderColor: t.danger, backgroundColor: t.surface, justifyContent: 'center', flexDirection: 'row', alignItems: 'center', gap: 10 }]}>
-                <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: t.danger }} />
-                <Text style={{ color: t.danger, fontWeight: '600' }}>Listening… release to send</Text>
-              </View>
+              <RecordingBar />
             ) : (
-              <TextInput
-                ref={input}
-                value={text}
-                onChangeText={setText}
-                placeholder="Message Alphadex"
-                placeholderTextColor={t.textDim}
-                style={[s.input, { color: t.text, borderColor: t.border, backgroundColor: t.surface }]}
-                multiline
-                submitBehavior="newline"
-                textAlignVertical="center"
-                editable={!busy}
-              />
-            )}
+              <>
+                <Pressable
+                  onPress={() => {
+                    Keyboard.dismiss();
+                    setMenu(true);
+                  }}
+                  accessibilityRole="button"
+                  accessibilityLabel="More actions"
+                  style={[s.round, { backgroundColor: t.surface, borderColor: t.border, borderWidth: 1 }]}>
+                  <Plus size={22} color={t.accent} weight="bold" />
+                </Pressable>
 
-            {hasText && !listening ? (
-              <Pressable
-                onPress={submit}
-                disabled={busy}
-                accessibilityRole="button"
-                accessibilityLabel="Send"
-                style={[s.round, { backgroundColor: t.accent, opacity: busy ? 0.4 : 1 }]}>
-                <ArrowUp size={22} color={t.onAccent} weight="bold" />
-              </Pressable>
-            ) : (
-              <TalkButton size={44} compact />
+                <TextInput
+                  ref={input}
+                  value={text}
+                  onChangeText={setText}
+                  placeholder="Message Alphadex"
+                  placeholderTextColor={t.textDim}
+                  style={[s.input, { color: t.text, borderColor: t.border, backgroundColor: t.surface }]}
+                  multiline
+                  submitBehavior="newline"
+                  textAlignVertical="center"
+                  editable={!busy}
+                />
+
+                {hasText ? (
+                  <Pressable
+                    onPress={submit}
+                    disabled={busy}
+                    accessibilityRole="button"
+                    accessibilityLabel="Send"
+                    style={[s.round, { backgroundColor: t.accent, opacity: busy ? 0.4 : 1 }]}>
+                    <ArrowUp size={22} color={t.onAccent} weight="bold" />
+                  </Pressable>
+                ) : (
+                  <TalkButton size={44} compact />
+                )}
+              </>
             )}
           </View>
         </View>

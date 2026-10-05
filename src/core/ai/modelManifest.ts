@@ -1,4 +1,4 @@
-export type ModelId = 'qwen3_fast' | 'qwen3' | 'whisper' | 'kokoro';
+export type ModelId = 'qwen3_fast' | 'qwen3' | 'whisper' | 'whisper_small' | 'kokoro';
 
 export interface ModelSpec {
   id: ModelId;
@@ -42,7 +42,7 @@ export const MODEL_MANIFEST: ModelSpec[] = [
   },
   {
     id: 'whisper',
-    name: 'Whisper base.en (q5_1)',
+    name: 'Whisper base (speech recognition)',
     purpose: 'Offline speech-to-text',
     version: 'ggml base.en q5_1',
     platform: 'android',
@@ -50,6 +50,17 @@ export const MODEL_MANIFEST: ModelSpec[] = [
     fileName: 'ggml-base.en-q5_1.bin',
     sizeBytes: 59721011,
     sha256: '4baf70dd0d7c4247ba2b81fafd9c01005ac77c2f9ef064e00dcf195d0e2fdd2f',
+  },
+  {
+    id: 'whisper_small',
+    name: 'Whisper small — Better accuracy',
+    purpose: 'More accurate speech recognition (optional)',
+    version: 'ggml small.en q5_1',
+    platform: 'android',
+    url: 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.en-q5_1.bin',
+    fileName: 'ggml-small.en-q5_1.bin',
+    sizeBytes: 190098681,
+    sha256: 'bfdff4894dcb76bbf647d56263ea2a96645423f1669176f4844a1bf8e478ad30',
   },
   {
     id: 'kokoro',
