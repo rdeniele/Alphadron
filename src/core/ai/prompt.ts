@@ -9,6 +9,39 @@ function argLine(name: string, schema: ArgsSchema) {
   return `${name}(${parts.join(', ')})`;
 }
 
+const firstSentence = (s: string) => s.split(/(?<=\.)\s/)[0].replace(/\.$/, '');
+
+/** Always offered: the actions people ask for most. */
+const CORE_TOOLS = ['create_reminder', 'create_task', 'create_note', 'get_schedule', 'save_memory'];
+
+/** Extra tools are offered only when the request hints at them (fewer choices = fewer mistakes). */
+const HINTS: [RegExp, string[]][] = [
+  [/\b(battery|charge|charging|power)\b/i, ['get_battery']],
+  [/\b(device|phone|model|android|ram|memory size|storage)\b/i, ['get_device_info']],
+  [/\b(open|launch|start|go to)\b/i, ['open_app', 'open_url']],
+  [/\b(https?:|www\.|link|website|url)\b/i, ['open_url']],
+  [/\b(notify|notification|alert me)\b/i, ['send_notification']],
+  [/\b(time|date|day|clock|today'?s)\b/i, ['get_current_time']],
+  [/\b(find|search|look up|look for|did i (?:write|note|save))\b/i, ['search_notes', 'search_memory']],
+  [/\b(remember|recall|what do you know|did i tell you)\b/i, ['search_memory']],
+  [/\b(done|finish|finished|complete|completed|check off|tick)\b/i, ['complete_task']],
+  [/\b(cancel|delete|remove|stop)\b.*\b(reminder|alarm)\b/i, ['cancel_reminder']],
+  [/\b(tasks?|to-?dos?)\b/i, ['list_tasks', 'complete_task']],
+  [/\b(reminders?)\b/i, ['list_reminders', 'cancel_reminder']],
+  [/\b(meeting|appointment|event|calendar)\b/i, ['create_schedule']],
+  [/\b(focus|work on|prioriti[sz]e|what next|what should)\b/i, ['suggest_focus']],
+];
+
+export function selectTools(all: Tool[], userText: string): Tool[] {
+  const want = new Set(CORE_TOOLS);
+  for (const [re, names] of HINTS) {
+    if (re.test(userText)) {
+      names.forEach(n => want.add(n));
+    }
+  }
+  return all.filter(t => want.has(t.name));
+}
+
 /** Grammar-constrained schema: exactly one tool call, or a plain reply. */
 export function buildResponseSchema(tools: Tool[]): object {
   const variants: object[] = tools.map(t => ({
@@ -26,6 +59,24 @@ export function buildResponseSchema(tools: Tool[]): object {
   return { anyOf: variants };
 }
 
+const EXAMPLES = `Examples:
+User: remind me to call mom tomorrow at 6 pm
+{"tool":"create_reminder","arguments":{"title":"Call mom","when":"tomorrow at 6 pm"}}
+User: add buy milk to my tasks
+{"tool":"create_task","arguments":{"title":"Buy milk"}}
+User: what's the plan for friday?
+{"tool":"get_schedule","arguments":{"when":"friday"}}
+User: note that the router is in the hall closet
+{"tool":"create_note","arguments":{"body":"The router is in the hall closet"}}
+User: remember I prefer morning meetings
+{"tool":"save_memory","arguments":{"content":"Prefers morning meetings","category":"preference"}}
+User: any tips to focus while studying?
+{"reply":"Try 25-minute focus blocks with 5-minute breaks, and silence your phone."}`;
+
+/**
+ * Static instructions + examples come first so the model can reuse its cached
+ * prefix between messages; the changing context (time, memories) goes last.
+ */
 export function buildSystemPrompt(opts: {
   tools: Tool[];
   now: Date;
@@ -35,23 +86,22 @@ export function buildSystemPrompt(opts: {
 }): string {
   const date = opts.now.toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
   const time = opts.now.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
-  const toolLines = opts.tools.map(t => `- ${argLine(t.name, t.args)}: ${t.description}`).join('\n');
-  const mem = opts.memories.length
-    ? `\nThings the user asked you to remember:\n${opts.memories.map(m => `- ${m}`).join('\n')}\n`
-    : '';
-  return `You are Alphadex, a private personal assistant running fully offline on the user's phone. Current time: ${date}, ${time}. The user${opts.userName ? ` (${opts.userName})` : ''} has ${opts.openTaskCount} open task(s).
-${mem}
-You reply with ONE JSON object and nothing else:
-- To perform an action: {"tool": "<name>", "arguments": {...}}
-- To just talk: {"reply": "<short answer>"}
+  const toolLines = opts.tools.map(t => `- ${argLine(t.name, t.args)}: ${firstSentence(t.description)}`).join('\n');
+  const mem = opts.memories.length ? `\nRemembered: ${opts.memories.join('; ')}` : '';
+
+  return `You are Alphadex, an offline personal assistant on the user's phone. Reply with exactly ONE JSON object:
+{"tool":"NAME","arguments":{...}}  to act, or  {"reply":"..."}  to talk.
 
 Rules:
-- Use a tool whenever the user asks to create, change, check or find something. Never claim to have done something without calling its tool.
-- For times and dates, pass the user's own words (e.g. "tomorrow at 9 AM") in "when"/"due_date". Do not compute dates yourself.
-- "What do I have tomorrow/today?" -> get_schedule. "What should I work on?" -> list_tasks.
-- Only call save_memory when the user asks you to remember something or states a lasting preference or fact.
-- Keep replies to 1-2 short sentences. If something is unclear, ask a short question using reply.
+1. To create, add, remind, note, remember, complete or cancel anything, or to answer about the user's own tasks/reminders/schedule/notes, you MUST call a tool.
+2. Put times and dates in "when"/"due_date" exactly as the user said them. Never calculate dates.
+3. Otherwise answer in one or two short sentences with reply.
+4. Never say you did something unless you called the tool.
 
 Tools:
-${toolLines}`;
+${toolLines}
+
+${EXAMPLES}
+
+Now: ${date}, ${time}. User${opts.userName ? ': ' + opts.userName : ''}. Open tasks: ${opts.openTaskCount}.${mem}`;
 }

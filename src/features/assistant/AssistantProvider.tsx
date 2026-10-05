@@ -42,6 +42,11 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
     setMessages(await listMessages(id, 100));
   }, []);
 
+  // Apply the model chosen in Settings (unloads the other one if needed).
+  useEffect(() => {
+    runtime.provider.setPreferred(settings.aiModel);
+  }, [settings.aiModel]);
+
   useEffect(() => {
     runtime.onPhase = setPhase;
     reload();

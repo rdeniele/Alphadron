@@ -1,6 +1,7 @@
 import type { AIProvider, ChatTurn } from './AIProvider';
 import { parseModelAction } from './parseOutput';
-import { buildResponseSchema, buildSystemPrompt } from './prompt';
+import { buildResponseSchema, buildSystemPrompt, selectTools } from './prompt';
+import { groundArgs } from './ground';
 import { claimsAction, fastPath } from './fastPath';
 import { executeTool, type ExecutedTool } from '../tools/executor';
 import { formatReadResult } from '../tools/format';
@@ -32,7 +33,17 @@ export interface TurnDeps {
   onStatus?: (status: TurnStatus) => void;
 }
 
-const schemaCache = buildResponseSchema(TOOLS);
+const schemaCache = new Map<string, object>();
+
+function schemaFor(tools: typeof TOOLS): object {
+  const key = tools.map(t => t.name).join(',');
+  let s = schemaCache.get(key);
+  if (!s) {
+    s = buildResponseSchema(tools);
+    schemaCache.set(key, s);
+  }
+  return s;
+}
 
 const NOT_DONE_NOTE =
   "I couldn't set that up. Try something like \"Remind me tomorrow at 9 AM to call John\", or use the + button to add it yourself.";
@@ -77,8 +88,11 @@ export async function runTurn(userText: string, deps: TurnDeps): Promise<TurnRes
   // ---- Model path ----
   const history = (await listMessages(convId, 8))
     .filter(m => (m.role === 'user' || m.role === 'assistant') && m.id !== userMessage.id)
-    .slice(-6)
-    .map<ChatTurn>(m => ({ role: m.role as 'user' | 'assistant', content: m.content }));
+    .slice(-4)
+    .map<ChatTurn>(m => ({ role: m.role as 'user' | 'assistant', content: m.content.slice(0, 280) }));
+
+  // Offer only the tools this request could plausibly need (fewer choices = fewer mistakes).
+  const offered = selectTools(TOOLS, userText);
 
   const [memories, openTasks, userName] = await Promise.all([
     deps.ctx.memoryEnabled ? searchMemories(userText, 4) : Promise.resolve([]),
@@ -87,7 +101,7 @@ export async function runTurn(userText: string, deps: TurnDeps): Promise<TurnRes
   ]);
 
   const system = buildSystemPrompt({
-    tools: TOOLS,
+    tools: offered,
     now,
     memories: memories.map(m => m.content),
     openTaskCount: openTasks.length,
@@ -101,11 +115,11 @@ export async function runTurn(userText: string, deps: TurnDeps): Promise<TurnRes
   await deps.provider.load();
   deps.onStatus?.('thinking');
 
-  const raw = await deps.provider.generateJson(messages, schemaCache, { maxTokens: 200 });
+  const raw = await deps.provider.generateJson(messages, schemaFor(offered), { maxTokens: 120 });
   const parsed = parseModelAction(raw);
 
   if (!parsed) {
-    const text = (await deps.provider.generateText(messages, { maxTokens: 160 })) || "Sorry, I didn't understand that.";
+    const text = (await deps.provider.generateText(messages, { maxTokens: 120 })) || "Sorry, I didn't understand that.";
     return finish(claimsAction(text) ? NOT_DONE_NOTE : text, null, false);
   }
   if (parsed.kind === 'reply') {
@@ -115,6 +129,8 @@ export async function runTurn(userText: string, deps: TurnDeps): Promise<TurnRes
   }
 
   deps.onStatus?.('acting');
-  const action = await executeTool(parsed.tool, parsed.arguments, { ...deps.ctx, now });
+  const rawArgs = parsed.arguments && typeof parsed.arguments === 'object' ? (parsed.arguments as Record<string, unknown>) : {};
+  const args = groundArgs(parsed.tool, rawArgs, userText);
+  const action = await executeTool(parsed.tool, args, { ...deps.ctx, now });
   return finish(replyFromAction(action), action, false);
 }

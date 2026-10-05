@@ -7,7 +7,18 @@ export interface ChatTurn {
  * Abstraction over the reasoning model. LocalQwenProvider is the only
  * implementation now; a CloudProvider can be added later without touching callers.
  */
+export interface GenStats {
+  promptTokens: number;
+  cachedTokens: number;
+  promptMs: number;
+  genTokens: number;
+  genMs: number;
+  tokensPerSecond: number;
+}
+
 export interface AIProvider {
+  /** Timing of the most recent generation (for diagnostics). */
+  lastStats: GenStats | null;
   readonly id: string;
   isLoaded(): boolean;
   /** Loads the model into memory. Rejects with a user-readable Error. */

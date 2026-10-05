@@ -42,7 +42,7 @@ export function extractWhen(text: string): { when: string; rest: string } {
 
 const cap = (s: string) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s);
 
-function cleanTitle(s: string): string {
+export function cleanTitle(s: string): string {
   let t = s.replace(/\s+/g, ' ').trim();
   for (let i = 0; i < 3; i++) {
     t = t

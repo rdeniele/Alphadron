@@ -36,6 +36,6 @@ test('system prompt carries time, tools, memories and name', () => {
   });
   assert.match(p, /create_reminder\(title: string, when: string, repeat\?: none\|daily\)/);
   assert.match(p, /Prefers morning meetings/);
-  assert.match(p, /\(Sam\) has 3 open task/);
+  assert.match(p, /User: Sam\. Open tasks: 3/);
   assert.match(p, /2026/);
 });

@@ -1,4 +1,4 @@
-export type ModelId = 'qwen3' | 'whisper' | 'kokoro';
+export type ModelId = 'qwen3_fast' | 'qwen3' | 'whisper' | 'kokoro';
 
 export interface ModelSpec {
   id: ModelId;
@@ -18,9 +18,20 @@ export interface ModelSpec {
 // Checksums/sizes taken from Hugging Face LFS metadata on 2026-10-02.
 export const MODEL_MANIFEST: ModelSpec[] = [
   {
+    id: 'qwen3_fast',
+    name: 'Qwen3 0.6B — Fast (recommended)',
+    purpose: 'Quick replies and tool calling',
+    version: 'Q4_K_M',
+    platform: 'android',
+    url: 'https://huggingface.co/unsloth/Qwen3-0.6B-GGUF/resolve/main/Qwen3-0.6B-Q4_K_M.gguf',
+    fileName: 'Qwen3-0.6B-Q4_K_M.gguf',
+    sizeBytes: 396705472,
+    sha256: 'ac2d97712095a558e31573f62f466a3f9d93990898b0ec79d7c974c1780d524a',
+  },
+  {
     id: 'qwen3',
-    name: 'Qwen3 1.7B',
-    purpose: 'Reasoning, conversation, tool calling',
+    name: 'Qwen3 1.7B — Better quality',
+    purpose: 'Smarter but slower replies',
     version: 'Q4_K_M',
     platform: 'android',
     // Official Qwen/Qwen3-1.7B-GGUF only ships Q8_0, so Q4_K_M comes from unsloth's conversion.

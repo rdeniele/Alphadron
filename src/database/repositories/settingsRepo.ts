@@ -4,12 +4,15 @@ export interface AppSettings {
   theme: 'system' | 'light' | 'dark';
   memoryEnabled: boolean;
   onboardingDone: boolean;
+  /** Which Qwen3 model answers open-ended questions. */
+  aiModel: 'qwen3_fast' | 'qwen3';
 }
 
 export const defaultSettings: AppSettings = {
   theme: 'system',
   memoryEnabled: true,
   onboardingDone: false,
+  aiModel: 'qwen3_fast',
 };
 
 export async function loadSettings(): Promise<AppSettings> {

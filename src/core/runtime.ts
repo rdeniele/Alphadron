@@ -1,6 +1,5 @@
 import * as Device from 'expo-device';
 import { LocalQwenProvider } from './ai/LocalQwenProvider';
-import type { AIProvider } from './ai/AIProvider';
 import { runTurn, type TurnResult } from './ai/assistant';
 import { SpeechToTextService } from './voice/SpeechToTextService';
 import { KokoroTtsService, type TextToSpeechService } from './voice/TextToSpeechService';
@@ -17,7 +16,7 @@ const LOW_MEMORY_BYTES = 4 * 1024 ** 3;
  * Others: Qwen stays resident (faster); STT and TTS are still released after use.
  */
 export class Runtime {
-  readonly provider: AIProvider = new LocalQwenProvider();
+  readonly provider = new LocalQwenProvider();
   readonly stt = new SpeechToTextService();
   readonly tts: TextToSpeechService = new KokoroTtsService();
   phase: Phase = 'idle';
