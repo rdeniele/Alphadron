@@ -2,6 +2,7 @@ import type { AIProvider, ChatTurn } from './AIProvider';
 import { parseModelAction } from './parseOutput';
 import { buildResponseSchema, buildSystemPrompt, selectTools } from './prompt';
 import { groundArgs } from './ground';
+import { normalizeSpoken } from './spoken';
 import { claimsAction, fastPath } from './fastPath';
 import { executeTool, type ExecutedTool } from '../tools/executor';
 import { formatReadResult } from '../tools/format';
@@ -85,17 +86,18 @@ export async function runTurn(userText: string, deps: TurnDeps): Promise<TurnRes
     return finish(replyFromAction(action), action, true);
   }
 
-  // ---- Model path ----
+  // ---- Model path ---- (the model and grounding see spoken-normalised text)
+  const heard = normalizeSpoken(userText);
   const history = (await listMessages(convId, 8))
     .filter(m => (m.role === 'user' || m.role === 'assistant') && m.id !== userMessage.id)
     .slice(-4)
     .map<ChatTurn>(m => ({ role: m.role as 'user' | 'assistant', content: m.content.slice(0, 280) }));
 
   // Offer only the tools this request could plausibly need (fewer choices = fewer mistakes).
-  const offered = selectTools(TOOLS, userText);
+  const offered = selectTools(TOOLS, heard);
 
   const [memories, openTasks, userName] = await Promise.all([
-    deps.ctx.memoryEnabled ? searchMemories(userText, 4) : Promise.resolve([]),
+    deps.ctx.memoryEnabled ? searchMemories(heard, 4) : Promise.resolve([]),
     listTasks({ status: 'open' }),
     getPreference('user_name'),
   ]);
@@ -107,7 +109,7 @@ export async function runTurn(userText: string, deps: TurnDeps): Promise<TurnRes
     openTaskCount: openTasks.length,
     userName,
   });
-  const messages: ChatTurn[] = [{ role: 'system', content: system }, ...history, { role: 'user', content: userText }];
+  const messages: ChatTurn[] = [{ role: 'system', content: system }, ...history, { role: 'user', content: heard }];
 
   if (!deps.provider.isLoaded()) {
     deps.onStatus?.('loading');
@@ -130,7 +132,7 @@ export async function runTurn(userText: string, deps: TurnDeps): Promise<TurnRes
 
   deps.onStatus?.('acting');
   const rawArgs = parsed.arguments && typeof parsed.arguments === 'object' ? (parsed.arguments as Record<string, unknown>) : {};
-  const args = groundArgs(parsed.tool, rawArgs, userText);
+  const args = groundArgs(parsed.tool, rawArgs, heard);
   const action = await executeTool(parsed.tool, args, { ...deps.ctx, now });
   return finish(replyFromAction(action), action, false);
 }

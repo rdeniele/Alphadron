@@ -6,6 +6,8 @@
  * Pure (no React Native imports) so it is unit-testable.
  */
 
+import { normalizeSpoken } from './spoken';
+
 export type FastResult =
   | { kind: 'tool'; tool: string; args: Record<string, string | number | boolean> }
   | { kind: 'reply'; text: string };
@@ -86,7 +88,7 @@ const TIME_Q = /\bwhat(?:'s| is)? the time\b|\bwhat time is it\b|\bcurrent time\
 const BATTERY_Q = /\bbattery\b/i;
 
 export function fastPath(input: string): FastResult | null {
-  const text = input.trim();
+  const text = normalizeSpoken(input);
   if (!text || text.length > 400) {
     return null;
   }
