@@ -12,7 +12,9 @@ import { normalizeSpoken } from './spoken';
 export type Pending =
   | { kind: 'reminder-time'; title: string; repeat?: 'daily' | 'weekly' }
   | { kind: 'reminder-title'; when: string; repeat?: 'daily' | 'weekly' }
-  | { kind: 'task-title'; due?: string };
+  | { kind: 'task-title'; due?: string }
+  | { kind: 'event-time'; title: string }
+  | { kind: 'event-title'; when: string };
 
 export type FastResult =
   | { kind: 'tool'; tool: string; args: Record<string, string | number | boolean> }
@@ -33,6 +35,14 @@ export function resolvePending(p: Pending, input: string): FastResult | 'cancel'
       ? { kind: 'tool', tool: 'create_reminder', args: { title: p.title, when, ...(p.repeat ? { repeat: p.repeat } : {}) } }
       : null;
   }
+  if (p.kind === 'event-time') {
+    const { when } = extractWhen(text);
+    return when ? { kind: 'tool', tool: 'create_schedule', args: { title: p.title, when } } : null;
+  }
+  if (p.kind === 'event-title') {
+    const title = cleanTitle(extractWhen(text).rest);
+    return title.length > 1 ? { kind: 'tool', tool: 'create_schedule', args: { title, when: p.when } } : null;
+  }
   if (p.kind === 'reminder-title') {
     const title = cleanTitle(extractWhen(text).rest);
     return title.length > 1
@@ -51,6 +61,13 @@ const WEEKDAYS = 'monday|tuesday|wednesday|thursday|friday|saturday|sunday';
 const MONTHS = 'january|february|march|april|may|june|july|august|september|october|november|december';
 
 const TIME_PATTERNS: RegExp[] = [
+  // Timeframes first, so e.g. "later today" or "end of the week" are taken whole.
+  /\blater(?:\s+(?:today|on|this\s+(?:morning|afternoon|evening)))?\b/gi,
+  /\b(?:by\s+|before\s+)?(?:the\s+)?end\s+of\s+(?:the\s+)?(?:day|today|week|work\s?week|month)\b/gi,
+  /\b(?:eod|eow)\b/gi,
+  /\b(?:the\s+)?rest\s+of\s+(?:the\s+)?week\b/gi,
+  /\b(?:this|next)\s+(?:week|weekend|month)\b/gi,
+  /\b(?:on\s+)?the\s+weekend\b/gi,
   /\bday after tomorrow\b/gi,
   /\b(?:tomorrow|today|tonight)\b/gi,
   /\bin\s+(?:an?|\d+)\s*(?:minutes?|mins?|hours?|hrs?|days?|weeks?)\b/gi,
@@ -114,6 +131,11 @@ const CANCEL_REMINDER = /^\s*(?:please[, ]+)?(?:cancel|delete|remove)\s+(?:the |
 const COMPLETE_A = /^\s*(?:please[, ]+)?(?:mark|set)\s+(.+?)\s+(?:as\s+)?(?:done|complete|completed|finished)\s*$/i;
 const COMPLETE_B = /^\s*(?:please[, ]+)?(?:complete|finish|i (?:finished|completed|did)|done with)\s+(?:the\s+)?(?:task\s+)?(.+)$/i;
 
+// "schedule/book/plan a meeting ..." (noun optional) and "add/create an event|meeting|... ..." (noun required)
+const EVENT_A = /^\s*(?:please[, ]+)?(?:schedule|book|set up|plan)\s+(?:(?:an?|my|the|new)\s+)*(event|meeting|appointment|call|lunch|dinner|breakfast|interview|class|session|trip)?\b\s*(?:called|named|for)?\s*(.*)$/i;
+const EVENT_B = /^\s*(?:please[, ]+)?(?:add|create|new)\s+(?:(?:an?|my|the|new)\s+)*(event|meeting|appointment|call|lunch|dinner|breakfast|interview|class|session)\b\s*(?:called|named|for)?\s*(.*)$/i;
+const SHOW_TF = /^(?:please[, ]+)?(?:show|give|tell)(?: me)?(?: my)?\s+(?:the\s+)?(?:plan for\s+|agenda for\s+)?(?:today|tonight|tomorrow|this week|next week|this weekend|the week|this month)\b/i;
+const DUE_Q = /\b(?:due|coming up|upcoming|on deck|happening|going on)\b/i;
 const SCHEDULE_Q = /\b(plans?|schedule|agenda|calendar|what do i have|what(?:'s| is) on|what am i doing|am i free|am i busy|anything (?:on|planned|scheduled))\b/i;
 const QUESTIONISH = /\b(what|show|list|tell|any|do i|have i|how many|how|which|check|whats|what's)\b|\?$/i;
 const TASKS_Q = /\b(tasks?|to-?dos?|todo list)\b/i;
@@ -170,6 +192,29 @@ export function fastPath(input: string): FastResult | null {
     return { kind: 'tool', tool: 'create_task', args: { title, ...(when ? { due_date: when } : {}) } };
   }
 
+  // ---- Schedule an event ("schedule a meeting today at 3", "add a lunch with Sam friday at noon") ----
+  const ev = text.match(EVENT_A) || text.match(EVENT_B);
+  if (ev) {
+    const noun = ev[1] && !/^event$/i.test(ev[1]) ? `${ev[1]} ` : '';
+    const { when, rest } = extractWhen(ev[2]);
+    const title = cleanTitle(`${noun}${rest}`.trim());
+    if (title) {
+      if (!when) {
+        return {
+          kind: 'reply',
+          text: `Sure! When is "${title}"? For example: "tomorrow at 3 PM".`,
+          pending: { kind: 'event-time', title },
+        };
+      }
+      return { kind: 'tool', tool: 'create_schedule', args: { title, when } };
+    }
+    return {
+      kind: 'reply',
+      text: when ? 'Sure! What is the event called?' : 'Sure! What is the event, and when?',
+      pending: when ? { kind: 'event-title', when } : undefined,
+    };
+  }
+
   // ---- Notes & memory ----
   const an = text.match(ADD_NOTE);
   if (an && an[1].trim().length > 1) {
@@ -200,16 +245,29 @@ export function fastPath(input: string): FastResult | null {
   if (BATTERY_Q.test(text) && QUESTIONISH.test(text)) {
     return { kind: 'tool', tool: 'get_battery', args: {} };
   }
+  const asked = extractWhen(text).when; // a timeframe mentioned in the question, e.g. "this week"
+  // "show me today", "show tomorrow", "give me this week"
+  if (SHOW_TF.test(text)) {
+    return { kind: 'tool', tool: 'get_schedule', args: { when: asked || 'today' } };
+  }
+  // Tasks asked about with a timeframe: "what tasks are due today", "my to-dos this week"
+  if (TASKS_Q.test(text) && QUESTIONISH.test(text)) {
+    const done = /\b(done|completed|finished)\b/i.test(text);
+    return {
+      kind: 'tool',
+      tool: 'list_tasks',
+      args: { status: done ? 'done' : 'open', ...(asked && !done ? { when: asked } : {}) },
+    };
+  }
   if (SCHEDULE_Q.test(text) && QUESTIONISH.test(text)) {
-    const { when } = extractWhen(text);
-    return { kind: 'tool', tool: 'get_schedule', args: { when: when || 'today' } };
+    return { kind: 'tool', tool: 'get_schedule', args: { when: asked || 'today' } };
+  }
+  // "anything due this week?", "what's coming up", "what's due today"
+  if (DUE_Q.test(text) && QUESTIONISH.test(text)) {
+    return { kind: 'tool', tool: 'get_schedule', args: { when: asked || 'this week' } };
   }
   if (REMINDERS_Q.test(text) && QUESTIONISH.test(text)) {
     return { kind: 'tool', tool: 'list_reminders', args: {} };
-  }
-  if (TASKS_Q.test(text) && QUESTIONISH.test(text)) {
-    const done = /\b(done|completed|finished)\b/i.test(text);
-    return { kind: 'tool', tool: 'list_tasks', args: { status: done ? 'done' : 'open' } };
   }
 
   return null;

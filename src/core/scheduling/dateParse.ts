@@ -114,13 +114,43 @@ export function parseWhen(input: string, now: Date = new Date()): ParsedWhen | n
     return { date: new Date(now), hasTime: true };
   }
 
+  // "later" / "later today": a couple of hours from now.
+  if (/\blater\b/.test(s) && !/\bat\s+\d/.test(s)) {
+    const d = new Date(now.getTime() + 2 * 3600000);
+    d.setMinutes(Math.ceil(d.getMinutes() / 15) * 15, 0, 0);
+    // Past midnight means "later" no longer fits today: use tomorrow morning instead.
+    return d.getDate() === now.getDate()
+      ? { date: d, hasTime: true }
+      : { date: new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 9, 0), hasTime: false };
+  }
+
   // Day.
   let day: Date | null = null;
   let dayExplicit = true;
+  let defaultHour: number | null = null; // time used when only a day was given
   if (/\bday after tomorrow\b/.test(s)) {
     day = addDays(startOfDay(now), 2);
   } else if (/\btomorrow\b/.test(s)) {
     day = addDays(startOfDay(now), 1);
+  } else if (/\bend of (?:the )?(?:day|today)\b|\beod\b/.test(s)) {
+    day = startOfDay(now);
+    dayExplicit = false;
+    defaultHour = 17;
+  } else if (/\bend of (?:the )?(?:work )?week\b|\beow\b/.test(s)) {
+    day = nextWeekday(now, 5, true);
+    defaultHour = 17;
+  } else if (/\bnext week\b/.test(s)) {
+    day = nextWeekday(now, 1, false);
+  } else if (/\b(?:this week|rest of (?:the )?week)\b/.test(s)) {
+    day = nextWeekday(now, 5, true);
+  } else if (/\bnext weekend\b/.test(s)) {
+    day = addDays(nextWeekday(now, 6, true), now.getDay() === 6 ? 7 : now.getDay() === 0 ? 6 : 7);
+  } else if (/\bweekend\b/.test(s)) {
+    day = now.getDay() === 0 ? startOfDay(now) : nextWeekday(now, 6, true);
+  } else if (/\bnext month\b/.test(s)) {
+    day = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+  } else if (/\b(?:end of (?:the )?month|this month)\b/.test(s)) {
+    day = new Date(now.getFullYear(), now.getMonth() + 1, 0);
   } else if (/\b(today|tonight)\b/.test(s)) {
     day = startOfDay(now);
     dayExplicit = false;
@@ -178,7 +208,18 @@ export function parseWhen(input: string, now: Date = new Date()): ParsedWhen | n
     dayExplicit = false;
   }
   if (!clock) {
-    return { date: new Date(day.getFullYear(), day.getMonth(), day.getDate(), 9, 0), hasTime: false };
+    const base = defaultHour ?? 9;
+    const at = new Date(day.getFullYear(), day.getMonth(), day.getDate(), base, 0);
+    const isToday = startOfDay(day).getTime() === startOfDay(now).getTime();
+    if (isToday && at <= now) {
+      // Only a day ("today") was given and the default time has passed: use the next
+      // whole hour, or tomorrow morning if it is already late.
+      const next = new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours() + 1, 0);
+      return next.getHours() <= 21 && next.getDate() === now.getDate()
+        ? { date: next, hasTime: false }
+        : { date: new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 9, 0), hasTime: false };
+    }
+    return { date: at, hasTime: false };
   }
 
   const hour = resolveHour(clock, day, now);
@@ -210,7 +251,93 @@ export function formatWhen(date: Date, now: Date = new Date()): string {
   } else if (diffDays === 1) {
     dayStr = 'tomorrow';
   } else {
-    dayStr = `${WEEKDAYS[date.getDay()].slice(0, 3)}, ${MONTHS[date.getMonth()].slice(0, 3)} ${date.getDate()}`;
+    const cap3 = (s: string) => s.charAt(0).toUpperCase() + s.slice(1, 3);
+    dayStr = `${cap3(WEEKDAYS[date.getDay()])}, ${cap3(MONTHS[date.getMonth()])} ${date.getDate()}`;
   }
   return `${dayStr} at ${time}`;
+}
+
+/** The given weekday (0 = Sunday) on or after today when `includeToday`, otherwise strictly after. */
+function nextWeekday(now: Date, target: number, includeToday: boolean): Date {
+  let diff = (target - now.getDay() + 7) % 7;
+  if (diff === 0 && !includeToday) {
+    diff = 7;
+  }
+  return addDays(startOfDay(now), diff);
+}
+
+/** A task due on a day without a time is stored as 23:59, which the UI shows as just the day. */
+export function dateOnlyDue(day: Date): number {
+  return new Date(day.getFullYear(), day.getMonth(), day.getDate(), 23, 59, 0, 0).getTime();
+}
+
+export function isDateOnlyDue(ms: number): boolean {
+  const d = new Date(ms);
+  return d.getHours() === 23 && d.getMinutes() === 59;
+}
+
+/** Due-date text: "today", "tomorrow", "Fri, Oct 9", or with a time if one was set. */
+export function formatDue(ms: number, now: Date = new Date()): string {
+  const d = new Date(ms);
+  return isDateOnlyDue(ms) ? formatWhen(d, now).replace(/ at .*$/, '') : formatWhen(d, now);
+}
+
+export interface DateRange {
+  from: number;
+  to: number;
+  /** Human label: "today", "tomorrow", "this week", "next week", "this weekend", "Fri, Oct 9"... */
+  label: string;
+  /** Number of calendar days covered. */
+  days: number;
+}
+
+/**
+ * Turns a timeframe phrase into a span of days: "today", "tomorrow", "this week",
+ * "next week", "this weekend", "this month", "next month", or a specific day.
+ */
+export function parseRange(phrase: string, now: Date = new Date()): DateRange | null {
+  const s = phrase.toLowerCase();
+  const span = (start: Date, end: Date, label: string): DateRange => ({
+    from: startOfDay(start).getTime(),
+    to: endOfLocalDay(end),
+    label,
+    days: Math.round((startOfDay(end).getTime() - startOfDay(start).getTime()) / 86400000) + 1,
+  });
+  const today = startOfDay(now);
+
+  if (/\bnext week\b/.test(s)) {
+    const mon = nextWeekday(now, 1, false);
+    return span(mon, addDays(mon, 6), 'next week');
+  }
+  if (/\b(?:this week|rest of (?:the )?week|the week|week)\b/.test(s)) {
+    const sunday = nextWeekday(now, 0, true);
+    return span(today, sunday, 'this week');
+  }
+  if (/\bnext weekend\b/.test(s)) {
+    const sat = addDays(nextWeekday(now, 6, true), now.getDay() === 6 ? 7 : now.getDay() === 0 ? 6 : 7);
+    return span(sat, addDays(sat, 1), 'next weekend');
+  }
+  if (/\bweekend\b/.test(s)) {
+    const sat = now.getDay() === 0 ? addDays(today, -1) : nextWeekday(now, 6, true);
+    return span(now.getDay() === 0 ? today : sat, addDays(sat, 1), 'this weekend');
+  }
+  if (/\bnext month\b/.test(s)) {
+    return span(new Date(now.getFullYear(), now.getMonth() + 1, 1), new Date(now.getFullYear(), now.getMonth() + 2, 0), 'next month');
+  }
+  if (/\bthis month\b/.test(s)) {
+    return span(today, new Date(now.getFullYear(), now.getMonth() + 1, 0), 'this month');
+  }
+  const p = parseWhen(phrase, now);
+  if (!p) {
+    return null;
+  }
+  const d = startOfDay(p.date);
+  const diff = Math.round((d.getTime() - today.getTime()) / 86400000);
+  const label =
+    diff === 0
+      ? 'today'
+      : diff === 1
+        ? 'tomorrow'
+        : `${WEEKDAYS[d.getDay()][0].toUpperCase()}${WEEKDAYS[d.getDay()].slice(1, 3)}, ${MONTHS[d.getMonth()].slice(0, 3)} ${d.getDate()}`;
+  return span(d, d, label);
 }

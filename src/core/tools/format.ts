@@ -9,22 +9,35 @@ interface ScheduleItem {
   time?: string;
 }
 
+interface ScheduleDay {
+  label: string;
+  items: ScheduleItem[];
+}
+
 const bullet = (s: string) => `• ${s}`;
 
 function item(i: ScheduleItem): string {
-  const label = i.kind === 'task' ? 'Task' : i.kind === 'reminder' ? 'Reminder' : 'Event';
-  return bullet(i.time ? `${i.time} — ${i.title}` : `${i.title}  (${label.toLowerCase()} due)`);
+  return bullet(i.time ? `${i.time} — ${i.title}` : `${i.title}  (task due)`);
 }
+
+/** "today" -> "today", "this week" -> "this week", a date -> "for Fri, Oct 9" */
+const forLabel = (label: string) => (/^(today|tomorrow)$/.test(label) ? label : `for ${label}`);
 
 export function formatReadResult(tool: string, data: unknown): string | null {
   switch (tool) {
     case 'get_schedule': {
-      const d = data as { label: string; items: ScheduleItem[]; overdue: string[] };
+      const d = data as { label: string; days: ScheduleDay[]; overdue: string[] };
       const lines: string[] = [];
-      if (d.items.length) {
-        lines.push(`Here's ${d.label}:`, ...d.items.map(item));
+      const withItems = d.days.filter(x => x.items.length);
+      if (!withItems.length) {
+        lines.push(`You have nothing planned ${forLabel(d.label)}.`);
+      } else if (d.days.length === 1) {
+        lines.push(`Here's ${d.label}:`, ...withItems[0].items.map(item));
       } else {
-        lines.push(`You have nothing planned ${d.label === 'today' || d.label === 'tomorrow' ? d.label : 'for ' + d.label}.`);
+        lines.push(`Here's ${d.label}:`);
+        for (const day of withItems) {
+          lines.push('', `${day.label.charAt(0).toUpperCase() + day.label.slice(1)}:`, ...day.items.map(item));
+        }
       }
       if (d.overdue.length) {
         lines.push('', 'Overdue:', ...d.overdue.map(bullet));
@@ -32,13 +45,16 @@ export function formatReadResult(tool: string, data: unknown): string | null {
       return lines.join('\n');
     }
     case 'list_tasks': {
-      const list = data as { title: string; due: string | null; status: string }[];
-      if (!list.length) {
-        return 'You have no tasks in that list.';
+      const d = data as { scope: string | null; items: { title: string; due: string | null; overdue: boolean }[] };
+      if (!d.items.length) {
+        return d.scope ? `You have no tasks due ${d.scope === 'today' || d.scope === 'tomorrow' ? d.scope : 'for ' + d.scope}.` : 'You have no tasks in that list.';
       }
+      const head = d.scope
+        ? `${d.items.length} task${d.items.length === 1 ? '' : 's'} due ${d.scope === 'today' || d.scope === 'tomorrow' ? d.scope : d.scope}:`
+        : `${d.items.length} task${d.items.length === 1 ? '' : 's'}:`;
       return [
-        `${list.length} task${list.length === 1 ? '' : 's'}:`,
-        ...list.map(t => bullet(t.due ? `${t.title}  (due ${t.due})` : t.title)),
+        head,
+        ...d.items.map(t => bullet(t.due ? `${t.title}  (${t.overdue ? 'overdue, was due' : 'due'} ${t.due})` : t.title)),
       ].join('\n');
     }
     case 'list_reminders': {

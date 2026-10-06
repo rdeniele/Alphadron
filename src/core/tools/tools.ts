@@ -1,4 +1,4 @@
-import { formatWhen, parseWhen, startOfLocalDay, endOfLocalDay } from '../scheduling/dateParse';
+import { dateOnlyDue, endOfLocalDay, formatDue, formatWhen, parseRange, parseWhen, startOfLocalDay } from '../scheduling/dateParse';
 import { looksSensitive } from '../memory/sensitive';
 import { SUPPORTED_APPS } from '../../platform/android/device';
 import { cancelReminderNotification, scheduleReminder } from '../reminders/scheduler';
@@ -44,7 +44,8 @@ export const TOOLS: Tool[] = [
         if (!p) {
           return fail(`I couldn't understand the due date "${a.due_date}".`);
         }
-        dueAt = p.date.getTime();
+        // "by Friday" / "this week" / "today" have no time of day: store them as due that whole day.
+        dueAt = p.hasTime ? p.date.getTime() : dateOnlyDue(p.date);
       }
       const t = await tasks.createTask({
         title: String(a.title),
@@ -52,7 +53,7 @@ export const TOOLS: Tool[] = [
         dueAt,
         priority: a.priority ? PRIORITY[String(a.priority)] : 2,
       });
-      const due = dueAt ? ` It's due ${formatWhen(new Date(dueAt), ctx.now)}.` : '';
+      const due = dueAt ? ` It's due ${formatDue(dueAt, ctx.now)}.` : '';
       return { ok: true, summary: `Added the task "${t.title}".${due}`, chip: 'Task created', data: t };
     },
   },
@@ -75,18 +76,30 @@ export const TOOLS: Tool[] = [
   },
   {
     name: 'list_tasks',
-    description: 'List the user\'s tasks.',
-    args: { status: { type: 'string', description: 'which tasks', enum: ['open', 'done', 'all'] } },
+    description: 'List the user\'s tasks, optionally only those due in a timeframe like "today" or "this week".',
+    args: {
+      status: { type: 'string', description: 'which tasks', enum: ['open', 'done', 'all'] },
+      when: { type: 'string', description: 'only tasks due then, e.g. "today", "this week"', maxLength: 100 },
+    },
     readOnly: true,
     async run(a, ctx) {
-      const list = await tasks.listTasks({ status: (a.status as 'open' | 'done' | 'all') ?? 'open' });
-      const data = list.map(t => ({
+      let list = await tasks.listTasks({ status: (a.status as 'open' | 'done' | 'all') ?? 'open' });
+      const range = a.when ? parseRange(String(a.when), ctx.now) : null;
+      if (range) {
+        const startToday = startOfLocalDay(ctx.now);
+        const includesToday = range.from <= startToday && startToday <= range.to;
+        list = list.filter(
+          t => t.dueAt !== null && ((t.dueAt >= range.from && t.dueAt <= range.to) || (includesToday && t.dueAt < startToday && t.status !== 'done')),
+        );
+      }
+      const items = list.map(t => ({
         id: t.id,
         title: t.title,
         status: t.status,
-        due: t.dueAt ? formatWhen(new Date(t.dueAt), ctx.now) : null,
+        due: t.dueAt ? formatDue(t.dueAt, ctx.now) : null,
+        overdue: t.status !== 'done' && t.dueAt !== null && t.dueAt < startOfLocalDay(ctx.now),
       }));
-      return { ok: true, summary: `${list.length} task(s).`, chip: 'Tasks checked', data };
+      return { ok: true, summary: `${list.length} task(s).`, chip: 'Tasks checked', data: { scope: range?.label ?? null, items } };
     },
   },
   {
@@ -215,29 +228,39 @@ export const TOOLS: Tool[] = [
     readOnly: true,
     async run(a, ctx) {
       const phrase = a.when ? String(a.when) : 'today';
-      const p = parseWhen(phrase, ctx.now) ?? parseWhen('today', ctx.now)!;
-      const from = startOfLocalDay(p.date);
-      const to = endOfLocalDay(p.date);
-      const isToday = from === startOfLocalDay(ctx.now);
+      const range = parseRange(phrase, ctx.now) ?? parseRange('today', ctx.now)!;
+      const { from, to } = range;
+      const startToday = startOfLocalDay(ctx.now);
+      const includesToday = from <= startToday && startToday <= to;
       const [dueTasks, rems, evs, overdue] = await Promise.all([
         tasks.listTasks({ status: 'open', dueBefore: to }),
         reminders.listReminders({ from, to }),
         events.listEvents(from, to),
-        isToday ? tasks.listTasks({ status: 'open', dueBefore: from - 1 }) : Promise.resolve([]),
+        includesToday ? tasks.listTasks({ status: 'open', dueBefore: startToday - 1 }) : Promise.resolve([]),
       ]);
       const time = (ms: number) => formatWhen(new Date(ms), ctx.now).replace(/^.* at /, '');
-      const timed = [
-        ...rems.map(r => ({ at: r.triggerAt, item: { kind: 'reminder' as const, title: r.title, time: time(r.triggerAt) } })),
-        ...evs.map(e => ({ at: e.startsAt, item: { kind: 'event' as const, title: e.title, time: time(e.startsAt) } })),
-      ]
-        .sort((x, y) => x.at - y.at)
-        .map(x => x.item);
-      const taskItems = dueTasks
-        .filter(t => t.dueAt! >= from)
-        .map(t => ({ kind: 'task' as const, title: t.title }));
+
+      // One entry per calendar day in the range (a single day for "today"/"tomorrow").
+      const days = [];
+      for (let i = 0; i < range.days; i++) {
+        const d = new Date(from);
+        d.setDate(d.getDate() + i);
+        const dFrom = startOfLocalDay(d);
+        const dTo = endOfLocalDay(d);
+        const timed = [
+          ...rems.filter(r => r.triggerAt >= dFrom && r.triggerAt <= dTo).map(r => ({ at: r.triggerAt, item: { kind: 'reminder' as const, title: r.title, time: time(r.triggerAt) } })),
+          ...evs.filter(e => e.startsAt >= dFrom && e.startsAt <= dTo).map(e => ({ at: e.startsAt, item: { kind: 'event' as const, title: e.title, time: time(e.startsAt) } })),
+        ]
+          .sort((x, y) => x.at - y.at)
+          .map(x => x.item);
+        const taskItems = dueTasks
+          .filter(t => t.dueAt !== null && t.dueAt >= dFrom && t.dueAt <= dTo)
+          .map(t => ({ kind: 'task' as const, title: t.title }));
+        days.push({ label: dayLabel(d, ctx.now), items: [...timed, ...taskItems] });
+      }
       const data = {
-        label: dayLabel(new Date(from + 1), ctx.now),
-        items: [...timed, ...taskItems],
+        label: range.label,
+        days,
         overdue: overdue.map(t => t.title),
       };
       return { ok: true, summary: 'Schedule retrieved.', chip: 'Schedule checked', data };

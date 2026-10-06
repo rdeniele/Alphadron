@@ -10,7 +10,7 @@ import * as tasks from '../../database/repositories/tasksRepo';
 import * as reminders from '../../database/repositories/remindersRepo';
 import * as events from '../../database/repositories/eventsRepo';
 import { cancelReminderNotification } from '../../core/reminders/scheduler';
-import { endOfLocalDay, startOfLocalDay } from '../../core/scheduling/dateParse';
+import { endOfLocalDay, isDateOnlyDue, startOfLocalDay } from '../../core/scheduling/dateParse';
 
 type Tab = 'agenda' | 'tasks' | 'reminders' | 'schedule';
 const TABS: { key: Tab; label: string }[] = [
@@ -93,7 +93,8 @@ export function PlanScreen() {
         <Text style={{ color: t.text, fontSize: 16, textDecorationLine: x.status === 'done' ? 'line-through' : 'none' }}>{x.title}</Text>
         {x.dueAt ? (
           <Text style={{ color: t.textDim, fontSize: 13 }}>
-            Due {fmtDay(x.dueAt)} {fmtTime(x.dueAt)}
+            Due {fmtDay(x.dueAt)}
+            {isDateOnlyDue(x.dueAt) ? '' : ` ${fmtTime(x.dueAt)}`}
           </Text>
         ) : null}
       </View>
