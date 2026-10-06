@@ -103,3 +103,16 @@ export function isPromptEcho(text: string, prompt: string): boolean {
   const hits = t.filter(w => p.has(w)).length;
   return hits / t.length > 0.8 && t.length >= 6;
 }
+
+/**
+ * whisper.rn's native transcribeData() decodes its ArrayBuffer as signed 16-bit
+ * little-endian PCM (despite the library's docs saying float32), so convert back.
+ */
+export function floatToPcm16(samples: Float32Array): Int16Array {
+  const out = new Int16Array(samples.length);
+  for (let i = 0; i < samples.length; i++) {
+    const v = Math.max(-1, Math.min(1, samples[i]));
+    out[i] = Math.round(v * 32767);
+  }
+  return out;
+}

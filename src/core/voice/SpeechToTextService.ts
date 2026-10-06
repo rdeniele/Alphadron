@@ -4,7 +4,7 @@ import { initWhisper, type WhisperContext } from 'whisper.rn/index';
 import { MODEL_MANIFEST, type ModelId } from '../ai/modelManifest';
 import { getModelInfo, markLoaded } from '../ai/modelManager';
 import { micSourceId, type MicSource } from './micOptions';
-import { SILENCE_LEVEL, isPromptEcho, SAMPLE_RATE, base64ToBytes, chunkLevel, cleanTranscript, pcm16ToFloat32, prepareAudio } from './audioUtils';
+import { floatToPcm16, SILENCE_LEVEL, isPromptEcho, SAMPLE_RATE, base64ToBytes, chunkLevel, cleanTranscript, pcm16ToFloat32, prepareAudio } from './audioUtils';
 
 const MAX_SECONDS = 120;
 const toPath = (uri: string) => uri.replace(/^file:\/\//, '');
@@ -132,10 +132,10 @@ export class SpeechToTextService {
       if (seconds < 0.5 || this.peak < SILENCE_LEVEL) {
         return ''; // too short or silent: nothing to transcribe
       }
-      const samples = prepareAudio(pcm16ToFloat32(this.chunks));
+      const pcm = floatToPcm16(prepareAudio(pcm16ToFloat32(this.chunks)));
       this.chunks = [];
       const ctx = await this.loadWhisper();
-      const { promise } = ctx.transcribeData(samples.buffer as ArrayBuffer, {
+      const { promise } = ctx.transcribeData(pcm.buffer as ArrayBuffer, {
         language: 'en',
         translate: false,
         temperature: 0,

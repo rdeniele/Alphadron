@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { prepareAudio, cleanTranscript, pcm16ToFloat32, chunkLevel, isPromptEcho, SAMPLE_RATE } from '../src/core/voice/audioUtils.ts';
+import { prepareAudio, cleanTranscript, pcm16ToFloat32, chunkLevel, isPromptEcho, floatToPcm16, SAMPLE_RATE } from '../src/core/voice/audioUtils.ts';
 
 const peakOf = (a: Float32Array) => a.reduce((m, v) => Math.max(m, Math.abs(v)), 0);
 
@@ -47,4 +47,16 @@ test('prompt echo is detected, real speech is not', () => {
   assert.equal(isPromptEcho('Alphadex, remind me tomorrow at 9 AM to work on my project. Add a task.', PROMPT), true);
   assert.equal(isPromptEcho('Remind me tomorrow at 9 AM to call John', PROMPT), false);
   assert.equal(isPromptEcho('Add a task', PROMPT), false);
+});
+
+test('float -> pcm16 round trip matches what the native decoder expects', () => {
+  const pcm = floatToPcm16(new Float32Array([0, 0.5, -0.5, 1, -1, 2, -2]));
+  assert.deepEqual(Array.from(pcm), [0, 16384, -16383, 32767, -32767, 32767, -32767]);
+  // the bytes whisper.rn reads: little-endian int16
+  const bytes = new Uint8Array(pcm.buffer);
+  assert.equal(bytes.length, 14);
+  assert.equal(bytes[2] | (bytes[3] << 8), 16384);
+  // decode with the same math as the native decodePcm16 (sample / 32767)
+  const decoded = Array.from(pcm).map(v => v / 32767);
+  assert.ok(Math.abs(decoded[1] - 0.5) < 1e-3);
 });
