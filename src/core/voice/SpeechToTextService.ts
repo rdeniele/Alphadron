@@ -13,7 +13,7 @@ const toPath = (uri: string) => uri.replace(/^file:\/\//, '');
 
 /** Words the user is likely to say; nudges Whisper toward them (fewer "remind me" -> "remain me" errors). */
 const VOCAB_PROMPT =
-  'Alphadex, remind me tomorrow at 9 AM to work on my project. Add a task. Create a note. What do I have today? Schedule a meeting on Friday at 3 PM.';
+  'Alphadron, remind me tomorrow at 9 AM to work on my project. Add a task. Create a note. What do I have today? Schedule a meeting on Friday at 3 PM.';
 
 export type SttState = 'idle' | 'listening' | 'transcribing';
 

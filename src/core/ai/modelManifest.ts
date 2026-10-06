@@ -20,7 +20,7 @@ export interface ModelSpec {
 export const MODEL_MANIFEST: ModelSpec[] = [
   {
     id: 'qwen3_fast',
-    name: 'Qwen3 0.6B — the brain',
+    name: 'Qwen3 0.6B (assistant brain)',
     purpose: 'Chat and understanding',
     version: 'Q4_K_M',
     platform: 'android',
@@ -31,7 +31,7 @@ export const MODEL_MANIFEST: ModelSpec[] = [
   },
   {
     id: 'whisper',
-    name: 'Whisper base — hearing',
+    name: 'Whisper base (hearing)',
     purpose: 'Offline speech recognition',
     version: 'ggml base.en q5_1',
     platform: 'android',
@@ -42,7 +42,7 @@ export const MODEL_MANIFEST: ModelSpec[] = [
   },
   {
     id: 'kokoro',
-    name: 'Kokoro 82M — voice',
+    name: 'Kokoro 82M (voice)',
     purpose: 'Offline text-to-speech',
     version: 'sherpa-onnx kokoro-int8-en-v0_19',
     platform: 'android',

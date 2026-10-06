@@ -30,7 +30,7 @@ import { PHASE_LABEL, useAssistant } from './AssistantProvider';
 import { TalkButton } from './TalkButton';
 import { RecordingBar } from './RecordingBar';
 import { useQuickAdd, type AddMode } from '../common/QuickAdd';
-import { Chip, Row, Sheet, useLayout } from '../../components/ui';
+import { AccentFill, Chip, Logo, Row, Sheet, useLayout } from '../../components/ui';
 import { useTheme } from '../../theme';
 import { runtime } from '../../core/runtime';
 import type { ChatMessage } from '../../database/repositories/conversationsRepo';
@@ -56,22 +56,19 @@ function Bubble({ m, maxWidth }: { m: ChatMessage; maxWidth: number }) {
   }
   return (
     <View style={{ alignItems: mine ? 'flex-end' : 'flex-start', marginVertical: 4 }}>
-      <View
-        style={[
-          s.bubble,
-          {
-            maxWidth,
-            backgroundColor: mine ? t.accent : t.surface,
-            borderColor: t.border,
-            borderWidth: mine ? 0 : 1,
-            borderBottomRightRadius: mine ? 6 : 18,
-            borderBottomLeftRadius: mine ? 18 : 6,
-          },
-        ]}>
-        <Text selectable style={{ color: mine ? t.onAccent : t.text, fontSize: 16, lineHeight: 23 }}>
-          {m.content}
-        </Text>
-      </View>
+      {mine ? (
+        <AccentFill style={[s.bubble, { maxWidth, borderBottomRightRadius: 6 }]}>
+          <Text selectable style={{ color: t.onAccent, fontSize: 16, lineHeight: 23, fontWeight: '500' }}>
+            {m.content}
+          </Text>
+        </AccentFill>
+      ) : (
+        <View style={[s.bubble, { maxWidth, backgroundColor: t.surface, borderColor: t.border, borderWidth: 1, borderBottomLeftRadius: 6 }]}>
+          <Text selectable style={{ color: t.text, fontSize: 16, lineHeight: 23 }}>
+            {m.content}
+          </Text>
+        </View>
+      )}
       {chip ? (
         <View style={s.chip}>
           {chip.ok ? <CheckCircle size={16} color={t.ok} weight="fill" /> : <WarningCircle size={16} color={t.danger} weight="fill" />}
@@ -108,7 +105,7 @@ function WorkingBubble({ maxWidth }: { maxWidth: number }) {
     };
   }, [dots]);
 
-  const slow = phase === 'loading' ? 'First answer takes a little longer while the AI loads' : secs >= 6 ? 'Still working…' : '';
+  const slow = phase === 'loading' ? 'The first answer takes a little longer while the AI loads' : secs >= 6 ? 'Still working…' : '';
   return (
     <View style={{ alignItems: 'flex-start', marginVertical: 4 }}>
       <View style={[s.bubble, { maxWidth, backgroundColor: t.surface, borderColor: t.border, borderWidth: 1, borderBottomLeftRadius: 6, gap: 8 }]}>
@@ -195,7 +192,7 @@ export function ChatPanel({ onClose }: { onClose: () => void }) {
   const showEmpty = messages.length === 0 && !busy;
 
   return (
-    <View style={{ flex: 1, backgroundColor: t.bg, paddingTop: insets.top }}>
+    <View style={{ flex: 1, backgroundColor: 'transparent', paddingTop: insets.top }}>
       <View style={[s.header, { paddingHorizontal: gutter }]}>
         <Text style={[s.h1, { color: t.text }]}>Chat</Text>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 18 }}>
@@ -242,8 +239,8 @@ export function ChatPanel({ onClose }: { onClose: () => void }) {
           ListEmptyComponent={
             showEmpty ? (
               <View style={s.empty}>
-                <Sparkle size={36} color={t.accent} weight="fill" />
-                <Text style={{ color: t.text, fontSize: 20, fontWeight: '600' }}>Hi, I'm Alphadex</Text>
+                <Logo size={84} />
+                <Text style={{ color: t.text, fontSize: 20, fontWeight: '600' }}>Hi, I'm Alphadron</Text>
                 <Text style={{ color: t.textDim, textAlign: 'center' }}>
                   Chat with me about anything, or ask me to remind you, add a task, or check your day. Try one:
                 </Text>
@@ -275,7 +272,7 @@ export function ChatPanel({ onClose }: { onClose: () => void }) {
           }
         />
 
-        <View style={[s.barWrap, { borderTopColor: t.border, backgroundColor: t.bg, paddingBottom: 8 + insets.bottom }]}>
+        <View style={[s.barWrap, { borderTopColor: t.border, backgroundColor: t.tabBar, paddingBottom: 8 + insets.bottom }]}>
           <View style={[s.bar, { maxWidth: contentMax, paddingHorizontal: gutter - 6 }]}>
             {listening ? (
               <RecordingBar />
@@ -296,7 +293,7 @@ export function ChatPanel({ onClose }: { onClose: () => void }) {
                   ref={input}
                   value={text}
                   onChangeText={setText}
-                  placeholder="Message Alphadex"
+                  placeholder="Message Alphadron"
                   placeholderTextColor={t.textDim}
                   style={[s.input, { color: t.text, borderColor: t.border, backgroundColor: t.surface }]}
                   multiline
@@ -311,8 +308,10 @@ export function ChatPanel({ onClose }: { onClose: () => void }) {
                     disabled={busy}
                     accessibilityRole="button"
                     accessibilityLabel="Send"
-                    style={[s.round, { backgroundColor: t.accent, opacity: busy ? 0.4 : 1 }]}>
-                    <ArrowUp size={22} color={t.onAccent} weight="bold" />
+                    style={[s.round, { overflow: 'hidden', opacity: busy ? 0.4 : 1 }]}>
+                    <AccentFill style={{ width: 44, height: 44, alignItems: 'center', justifyContent: 'center' }}>
+                      <ArrowUp size={22} color={t.onAccent} weight="bold" />
+                    </AccentFill>
                   </Pressable>
                 ) : (
                   <TalkButton size={44} compact />

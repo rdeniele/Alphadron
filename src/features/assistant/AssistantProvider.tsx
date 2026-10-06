@@ -156,7 +156,7 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
             ? `That microphone was silent, so I switched to the ${micLabel(rotatedTo).toLowerCase()}. Tap the mic and try again.`
             : peak < 0.05
               ? 'The microphone recorded silence. Check Settings → Microphone and run the mic test.'
-              : "I couldn't make out words. Speak a little closer and clearly, then tap ✓.",
+              : "I couldn't make out any words. Try speaking a little closer and more clearly, then tap ✓.",
         );
       }
     } catch (e) {
@@ -204,7 +204,7 @@ export const useAssistant = () => useContext(Ctx);
 
 export const PHASE_LABEL: Record<Phase, string> = {
   idle: '',
-  listening: 'Listening… release to send',
+  listening: 'Listening…',
   transcribing: 'Transcribing…',
   checking: 'Checking…',
   loading: 'Waking up the AI…',

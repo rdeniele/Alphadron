@@ -9,7 +9,7 @@ import * as notes from '../../database/repositories/notesRepo';
 import * as memories from '../../database/repositories/memoriesRepo';
 import type { Tool, ToolResult } from './types';
 
-const fail = (summary: string): ToolResult => ({ ok: false, summary, chip: 'Could not complete' });
+const fail = (summary: string): ToolResult => ({ ok: false, summary, chip: "Couldn't complete" });
 const num = (v: unknown) => (typeof v === 'number' ? v : undefined);
 const str = (v: unknown) => (typeof v === 'string' ? v : undefined);
 
@@ -131,7 +131,7 @@ export const TOOLS: Tool[] = [
       });
       const scheduled = await scheduleReminder(r);
       const when = formatWhen(p.date, ctx.now);
-      const warn = scheduled ? '' : ' (Notifications are turned off, so it will not alert you. Enable them in system settings.)';
+      const warn = scheduled ? '' : ' Notifications are turned off for Alphadron, so you will not get an alert. You can turn them on in Android settings.';
       return {
         ok: true,
         summary: `Done. I'll remind you ${when}${repeat ? `, repeating ${repeat}` : ''}.${warn}`,
@@ -155,7 +155,7 @@ export const TOOLS: Tool[] = [
       }
       await reminders.setReminderEnabled(r.id, false);
       await cancelReminderNotification(r.id);
-      return { ok: true, summary: `Cancelled the reminder "${r.title}".`, chip: 'Reminder cancelled', data: r };
+      return { ok: true, summary: `Canceled the reminder "${r.title}".`, chip: 'Reminder canceled', data: r };
     },
   },
   {
@@ -196,7 +196,7 @@ export const TOOLS: Tool[] = [
     readOnly: false,
     async run(a, ctx) {
       if (!ctx.memoryEnabled) {
-        return fail('Memory is turned off in Settings, so I did not save that.');
+        return fail("Memory is turned off in Settings, so I didn't save that.");
       }
       const content = String(a.content);
       const sensitive = looksSensitive(content);
@@ -212,7 +212,7 @@ export const TOOLS: Tool[] = [
   },
   {
     name: 'search_memory',
-    description: 'Look up things the user told Alphadex to remember.',
+    description: 'Look up things the user told Alphadron to remember.',
     args: { query: { type: 'string', description: 'keywords', required: true } },
     readOnly: true,
     async run(a, ctx) {
@@ -399,7 +399,7 @@ export const TOOLS: Tool[] = [
     readOnly: false,
     async run(a, ctx) {
       if (!(await ctx.platform.notifications.ensurePermission())) {
-        return fail('Notifications are turned off for Alphadron in system settings.');
+        return fail('Notifications are turned off for Alphadron. Turn them on in Android settings.');
       }
       await ctx.platform.notifications.showNow(String(a.title), String(a.body));
       return { ok: true, summary: 'Notification sent.', chip: 'Notification sent' };

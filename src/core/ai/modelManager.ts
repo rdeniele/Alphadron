@@ -112,7 +112,7 @@ async function fetchWithResume(
   }
   const detail = lastError instanceof Error ? lastError.message : String(lastError);
   throw new Error(
-    `The connection kept dropping (${detail}). Your progress is not saved between launches; try again on a steadier Wi-Fi connection.`,
+    `The connection kept dropping (${detail}). Please try again on a steadier Wi-Fi connection.`,
   );
 }
 
@@ -149,7 +149,7 @@ export async function downloadModel(
   try {
     await fetchWithResume(spec, partPath, onProgress);
     if (cancelled.has(spec.id)) {
-      throw new Error('Download cancelled.');
+      throw new Error('Download canceled.');
     }
     const info = await FS.getInfoAsync(partPath);
     const size = info.exists ? info.size : 0;

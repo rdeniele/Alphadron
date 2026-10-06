@@ -2,6 +2,7 @@ import React, { createContext, useCallback, useContext, useState } from 'react';
 import { Modal } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ChatPanel } from './ChatScreen';
+import { Backdrop } from '../../components/Backdrop';
 import { useAssistant } from './AssistantProvider';
 
 interface Ctx {
@@ -43,6 +44,7 @@ export function ChatModalProvider({ children }: { children: React.ReactNode }) {
         statusBarTranslucent
         navigationBarTranslucent>
         <SafeAreaProvider>
+          <Backdrop />
           <ChatPanel onClose={close} />
         </SafeAreaProvider>
       </Modal>

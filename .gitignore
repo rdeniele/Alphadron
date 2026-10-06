@@ -88,3 +88,6 @@ dist/
 build-android*.log
 release/
 *.apk
+
+# Local one-off scratch
+scripts/_*.js

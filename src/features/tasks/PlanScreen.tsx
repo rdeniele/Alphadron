@@ -155,7 +155,9 @@ export function PlanScreen() {
                 ),
               )
             ) : (
-              <Empty text={`Nothing planned for ${dayLabel.toLowerCase()}. Tap + to add something.`} />
+              <Empty
+                text={`Nothing is planned ${/^(Today|Tomorrow|Yesterday)$/.test(dayLabel) ? `for ${dayLabel.toLowerCase()}` : `on ${dayLabel}`}. Tap + to add something.`}
+              />
             )}
           </>
         )}

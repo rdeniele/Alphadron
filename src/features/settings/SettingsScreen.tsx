@@ -52,14 +52,14 @@ export function SettingsScreen() {
   const testAlert = async () => {
     platform.notifications.setAlertPrefs({ sound: settings.alertSound, style: settings.alertStyle });
     if (await platform.notifications.ensurePermission()) {
-      await platform.notifications.showNow('Alphadex', 'This is how your due alerts will sound.');
+      await platform.notifications.showNow('Alphadron', 'This is how your due alerts will sound.');
     } else {
       await confirmAction('Notifications are turned off for Alphadron. Turn them on in Android settings to get alerts.', 'OK');
     }
   };
 
   const clearChats = async () => {
-    if (await confirmAction('Delete all chat history? Tasks, reminders and memories are kept.', 'Delete')) {
+    if (await confirmAction('Delete all chat history? Your tasks, reminders, and memories will be kept.', 'Delete')) {
       await clearAllConversations();
       await reload();
     }
@@ -74,7 +74,7 @@ export function SettingsScreen() {
         value={name}
         onChangeText={setName}
         onEndEditing={() => setPreference('user_name', name)}
-        placeholder="Your name (optional, so I can greet you)"
+        placeholder="Your name (optional)"
         placeholderTextColor={t.textDim}
         style={{ color: t.text, fontSize: 16, minHeight: 48, borderWidth: 1, borderColor: t.border, backgroundColor: t.surface, borderRadius: 12, paddingHorizontal: 14 }}
       />
@@ -103,7 +103,7 @@ export function SettingsScreen() {
           <View style={{ flex: 1 }}>
             <Text style={{ color: t.text, fontSize: 16 }}>Chime when something is due</Text>
             <Text style={{ color: t.textDim, fontSize: 12 }}>
-              One soft chime at the due time for reminders, events and tasks. It never repeats or nags.
+              One soft chime at the due time for reminders, events, and tasks. It never repeats or nags.
             </Text>
           </View>
           <Switch value={settings.alertSound} onValueChange={v => update('alertSound', v)} />
@@ -117,7 +117,7 @@ export function SettingsScreen() {
       ) : null}
       <Text style={{ color: t.textDim, fontSize: 13 }}>
         {settings.alertStyle === 'alarm' && settings.alertSound
-          ? 'Alarm volume rings at your alarm volume, even when the phone is on silent.'
+          ? 'Alarm volume plays at your alarm volume, even when the phone is on silent.'
           : 'Gentle follows your notification volume and respects silent mode.'}{' '}
         Tasks with only a date alert at 9:00 AM that day.
       </Text>
@@ -173,18 +173,18 @@ export function SettingsScreen() {
       <SectionTitle>Memory & privacy</SectionTitle>
       <Card>
         <Row gap={12}>
-          <Text style={{ color: t.text, flex: 1, fontSize: 16 }}>Remember things I ask it to</Text>
+          <Text style={{ color: t.text, flex: 1, fontSize: 16 }}>Let Alphadron remember things</Text>
           <Switch value={settings.memoryEnabled} onValueChange={v => update('memoryEnabled', v)} />
         </Row>
         <Text style={{ color: t.textDim, fontSize: 13, marginTop: 6 }}>
-          Everything stays on this phone. Chats, tasks, reminders, notes and memories are never sent anywhere. The microphone only records after you tap it.
+          Everything stays on this phone. Chats, tasks, reminders, notes, and memories are never sent anywhere. The microphone only records after you tap it.
         </Text>
       </Card>
       <Button label="Clear chat history" kind="danger" onPress={clearChats} />
 
       <SectionTitle>Offline AI (about 560 MB total)</SectionTitle>
       <Text style={{ color: t.textDim, fontSize: 13 }}>
-        {online ? 'Online — only needed to download these once.' : 'Offline — everything still works.'}
+        {online ? 'Online. This is only needed to download the models once.' : 'Offline. Everything still works.'}
       </Text>
       <ModelsPanel />
       <Diagnostics />

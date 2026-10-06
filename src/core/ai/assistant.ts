@@ -1,6 +1,7 @@
 import { ModelNotReadyError, type AIProvider, type ChatTurn } from './AIProvider';
 import { parseModelAction } from './parseOutput';
 import { smallTalk } from './smallTalk';
+import { polishReply } from './polish';
 import { buildResponseSchema, buildSystemPrompt, selectTools } from './prompt';
 import { groundArgs } from './ground';
 import { normalizeSpoken } from './spoken';
@@ -75,7 +76,7 @@ export async function runTurn(userText: string, deps: TurnDeps): Promise<TurnRes
     const toolJson = action
       ? JSON.stringify({ tool: action.tool, ok: action.result.ok, chip: action.result.chip })
       : null;
-    const assistantMessage = await addMessage(convId, 'assistant', reply, toolJson);
+    const assistantMessage = await addMessage(convId, 'assistant', polishReply(reply), toolJson);
     return { userMessage, assistantMessage, action, instant };
   };
 
@@ -150,7 +151,7 @@ export async function runTurn(userText: string, deps: TurnDeps): Promise<TurnRes
   } catch (e) {
     if (e instanceof ModelNotReadyError) {
       return finish(
-        "I can still set reminders, tasks and notes without the AI brain. For open chat, though, I need it: download it in Settings (about 400 MB, one time).",
+        "I can still set reminders, tasks, and notes without the AI brain. For open chat, though, I need it. You can download it in Settings (about 400 MB, one time).",
         null,
         true,
       );

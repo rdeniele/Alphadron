@@ -61,3 +61,10 @@ test('cancel words drop the pending question; unrelated text is not an answer', 
   assert.equal(resolvePending(ask.pending, 'never mind'), 'cancel');
   assert.equal(resolvePending(ask.pending, 'what is the weather like'), null);
 });
+
+test('the assistant can be greeted by either name', () => {
+  assert.match(smallTalk('Hey Alphadron!', opts)!, /^Hey, Sam!/);
+  assert.match(smallTalk('hello Alphadex', opts)!, /^Hey, Sam!/);
+  assert.match(smallTalk('thanks Alphadron', opts)!, /Anytime/);
+  assert.match(smallTalk("who are you", opts)!, /I'm Alphadron/);
+});

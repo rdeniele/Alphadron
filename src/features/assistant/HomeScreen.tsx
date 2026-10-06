@@ -7,7 +7,7 @@ import { RecordingBar } from './RecordingBar';
 import { PHASE_LABEL, useAssistant } from './AssistantProvider';
 import { useQuickAdd } from '../common/QuickAdd';
 import { useChatModal } from './ChatModal';
-import { Card, Chip, Empty, Row, Screen, SectionTitle, fmtTime, useLayout } from '../../components/ui';
+import { Card, Chip, Empty, Row, Screen, SectionTitle, Wordmark, fmtTime, useLayout } from '../../components/ui';
 import { useTheme } from '../../theme';
 import { useData } from '../../services/useData';
 import * as tasks from '../../database/repositories/tasksRepo';
@@ -173,7 +173,7 @@ export function HomeScreen() {
   const dateLine = new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
 
   const dock = (
-    <View style={{ backgroundColor: t.surface, borderTopColor: t.border, borderTopWidth: 1 }}>
+    <View style={{ backgroundColor: t.tabBar, borderTopColor: t.border, borderTopWidth: 1, borderTopLeftRadius: 28, borderTopRightRadius: 28 }}>
       <HomeDock
         onAdd={() => quick.open('reminder')}
         onChat={() => chat.open()}
@@ -184,8 +184,11 @@ export function HomeScreen() {
 
   return (
     <Screen footer={dock}>
-      <Text style={{ color: t.text, fontSize: 26, fontWeight: '700' }}>{greeting(name)}</Text>
-      <Text style={{ color: t.textDim, fontSize: 15, marginBottom: 4 }}>{dateLine}</Text>
+      <Wordmark />
+      <View style={{ marginTop: 8, marginBottom: 4 }}>
+        <Text style={{ color: t.text, fontSize: 26, fontWeight: '800' }}>{greeting(name)}</Text>
+        <Text style={{ color: t.textDim, fontSize: 14, letterSpacing: 0.4 }}>{dateLine}</Text>
+      </View>
 
       {phase !== 'idle' && phase !== 'listening' ? (
         <Card style={{ borderColor: t.accent }}>
@@ -258,7 +261,7 @@ export function HomeScreen() {
         </>
       ) : null}
       {!overdue.length && !timed.length && !due.length ? (
-        <Empty text={filter === 'all' ? 'Nothing planned for today. Tap + or hold the mic to add something.' : 'Nothing here today.'} />
+        <Empty text={filter === 'all' ? 'Nothing is planned for today. Tap Add or the mic to get started.' : 'Nothing here for today.'} />
       ) : null}
 
       {data.tomorrow.count ? (
@@ -329,7 +332,7 @@ function DockButton({ label, onPress, children, offset = 0 }: { label: string; o
           borderRadius: 27,
           borderWidth: 1,
           borderColor: t.border,
-          backgroundColor: t.bg,
+          backgroundColor: t.surface,
           alignItems: 'center',
           justifyContent: 'center',
         }}>

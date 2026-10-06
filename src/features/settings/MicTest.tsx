@@ -73,7 +73,7 @@ export function MicTest() {
 
   const verdict = (peak: number) =>
     peak < 0.05
-      ? { color: t.danger, text: 'Silent — this microphone recorded nothing. Pick a different option above and test again.' }
+      ? { color: t.danger, text: 'Silent. This microphone recorded nothing. Pick a different option above, then test again.' }
       : peak < 0.2
         ? { color: t.danger, text: 'Very quiet. Speak closer, or try another microphone option.' }
         : { color: t.ok, text: 'Good level.' };
@@ -106,10 +106,10 @@ export function MicTest() {
             </Text>
           ) : null}
           <Text style={{ color: verdict(result.peak).color }}>
-            Level {Math.round(result.peak * 100)}% — {verdict(result.peak).text}
+            Level {Math.round(result.peak * 100)}%. {verdict(result.peak).text}
           </Text>
           <Text style={{ color: t.text }}>
-            {result.text ? `Heard: “${result.text}”` : 'No words recognized.'}
+            {result.text ? `Heard: “${result.text}”` : 'No words were recognized.'}
           </Text>
         </View>
       ) : null}

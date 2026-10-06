@@ -9,7 +9,7 @@
     "android": {
       "package": "com.alphadron.app",
       "adaptiveIcon": {
-        "backgroundColor": "#0B0F14",
+        "backgroundColor": "#0E0E26",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
@@ -27,7 +27,16 @@
     },
     "plugins": [
       "expo-sqlite",
-      ["expo-notifications", { "sounds": ["./assets/sounds/alphadex_chime.wav"] }],
+      [
+        "expo-notifications",
+        {
+          "sounds": [
+            "./assets/sounds/alphadex_chime.wav"
+          ],
+          "icon": "./assets/brand/notification-icon.png",
+          "color": "#8B5CF6"
+        }
+      ],
       "expo-audio",
       [
         "expo-build-properties",
@@ -46,13 +55,23 @@
         }
       ],
       "expo-asset",
-      "@react-native-community/datetimepicker"
+      "@react-native-community/datetimepicker",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 220,
+          "resizeMode": "contain",
+          "backgroundColor": "#0C0B2B"
+        }
+      ]
     ],
     "extra": {
       "eas": {
         "projectId": "b0194bac-5c42-4dcf-94db-18d7a41befd5"
       }
     },
-    "owner": "r.deniele13"
+    "owner": "r.deniele13",
+    "backgroundColor": "#0C0B2B"
   }
 }

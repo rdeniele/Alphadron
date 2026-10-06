@@ -16,6 +16,7 @@ const random = <T>(items: T[]): T => items[Math.floor(Math.random() * items.leng
 function normalize(text: string): string {
   return text
     .toLowerCase()
+    .replace(/\balpha[\s-]?(?:dex|dron|decks|deks)\b/g, ' ') // the assistant's name, however it was spelled or heard
     .replace(/[^a-z' ]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
@@ -46,13 +47,13 @@ export function smallTalk(text: string, opts: SmallTalkOpts): string | null {
     return `Good ${part}${who}! ${pick(["Anything you want to plan for today?", "How are you feeling?", "Want me to run through your day?"])}`;
   }
   if (/^(how are you|how are you doing|how's it going|hows it going|what's up|whats up|sup)( today)?( alphadex)?$/.test(t)) {
-    return `Doing great, thanks for asking! How about you — how's your day been?`;
+    return `Doing great, thanks for asking! How about you? How's your day been?`;
   }
   if (/^(thanks|thank you|thx|ty|cheers|thanks a lot|thank you so much|thanks so much|appreciate it)( alphadex)?$/.test(t)) {
     return pick(["Anytime! Anything else I can help with?", "You're welcome! Need anything else?", "Happy to help. What's next?"]);
   }
   if (/^(who are you|what are you|what's your name|whats your name|what is your name|introduce yourself)$/.test(t)) {
-    return "I'm Alphadex, your private assistant. I live entirely on your phone, so nothing you tell me ever leaves it. I can keep your reminders, tasks, notes and schedule, and chat with you. What would you like to do?";
+    return "I'm Alphadron, your private assistant. I live entirely on your phone, so nothing you tell me ever leaves it. I can keep track of your reminders, tasks, notes, and schedule, and I'm happy to chat too. What would you like to do?";
   }
   if (/^(help|what can you do|what do you do|what can i ask you|what can i say|how do you work|commands|options)$/.test(t)) {
     return CAPABILITIES;

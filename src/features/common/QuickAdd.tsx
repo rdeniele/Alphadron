@@ -168,7 +168,7 @@ export function QuickAddProvider({ children }: { children: React.ReactNode }) {
         ) : null}
         {error ? <Text style={{ color: t.danger }}>{error}</Text> : null}
         <Button
-          label={mode === 'reminder' && when ? `Remind me ${formatPicked(when).toLowerCase()}` : 'Save'}
+          label={mode === 'reminder' && when ? `Remind me ${formatPicked(when).replace(/^(Today|Tomorrow)/, m => m.toLowerCase())}` : 'Save'}
           onPress={save}
           disabled={!canSave}
         />

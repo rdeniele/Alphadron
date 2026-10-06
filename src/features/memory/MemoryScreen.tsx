@@ -85,7 +85,7 @@ export function MemoryScreen() {
         {tab === 'memory' && (
           <>
             <Text style={{ color: t.textDim }}>
-              Only things you ask Alphadex to remember are saved here. Chats are not turned into memories.
+              Only things you ask Alphadron to remember are saved here. Chats are not turned into memories.
             </Text>
             <Row gap={12}>
               <Text style={{ color: t.text, flex: 1, fontSize: 16 }}>Memory enabled</Text>
@@ -95,7 +95,7 @@ export function MemoryScreen() {
               <TextInput
                 value={draft}
                 onChangeText={setDraft}
-                placeholder="Add a memory, e.g. My birthday is March 3"
+                placeholder="Add a memory, for example: My birthday is March 3"
                 placeholderTextColor={t.textDim}
                 style={{ color: t.text, fontSize: 16, minHeight: 46, borderWidth: 1, borderColor: t.border, borderRadius: 12, paddingHorizontal: 12, marginBottom: 8 }}
               />

@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { Check, X } from 'phosphor-react-native';
 import { useAssistant } from './AssistantProvider';
+import { AccentFill } from '../../components/ui';
 import { runtime } from '../../core/runtime';
 import { useTheme } from '../../theme';
 
@@ -53,7 +54,7 @@ export function RecordingBar({ size = 56 }: { size?: number }) {
             borderRadius: (size - 8) / 2,
             borderWidth: 1,
             borderColor: t.border,
-            backgroundColor: t.bg,
+            backgroundColor: t.surface,
             alignItems: 'center',
             justifyContent: 'center',
           }}>
@@ -98,15 +99,15 @@ export function RecordingBar({ size = 56 }: { size?: number }) {
             width: size,
             height: size,
             borderRadius: size / 2,
-            backgroundColor: t.accent,
-            alignItems: 'center',
-            justifyContent: 'center',
+            overflow: 'hidden',
           }}>
-          <Check size={28} color={t.onAccent} weight="bold" />
+          <AccentFill style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+            <Check size={28} color={t.onAccent} weight="bold" />
+          </AccentFill>
         </Pressable>
       </View>
       <Text style={{ color: heard ? t.textDim : t.danger, fontSize: 12, textAlign: 'center' }}>
-        {heard ? 'Speak, then tap ✓ to send · ✕ to cancel' : "I can't hear you yet — speak closer to the mic"}
+        {heard ? 'Speak, then tap ✓ to send or ✕ to cancel.' : "I can't hear you yet. Speak closer to the mic."}
       </Text>
     </View>
   );

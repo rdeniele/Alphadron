@@ -30,10 +30,11 @@ export function RootNavigator() {
         screenOptions={{
           headerShown: false,
           tabBarHideOnKeyboard: true,
-          tabBarLabelStyle: { fontSize: 12 },
           tabBarActiveTintColor: t.accent,
           tabBarInactiveTintColor: t.textDim,
-          tabBarStyle: { backgroundColor: t.surface, borderTopColor: t.border },
+          sceneStyle: { backgroundColor: 'transparent' },
+          tabBarStyle: { backgroundColor: t.tabBar, borderTopColor: t.border, borderTopWidth: 1 },
+          tabBarLabelStyle: { fontSize: 11, fontWeight: '700', letterSpacing: 0.4 },
         }}>
         <Tab.Screen name="Home" component={HomeScreen} options={{ tabBarIcon: (p: IconProps) => <House {...p} /> }} />
         <Tab.Screen name="Plan" component={PlanScreen} options={{ tabBarIcon: (p: IconProps) => <CalendarCheck {...p} /> }} />

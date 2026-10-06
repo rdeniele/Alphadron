@@ -17,7 +17,7 @@ interface ScheduleDay {
 const bullet = (s: string) => `• ${s}`;
 
 function item(i: ScheduleItem): string {
-  return bullet(i.time ? `${i.time} — ${i.title}` : `${i.title}  (task due)`);
+  return bullet(i.time ? `${i.time}: ${i.title}` : `${i.title} (task due)`);
 }
 
 /** "today" -> "today", "this week" -> "this week", a date -> "for Fri, Oct 9" */
@@ -54,7 +54,7 @@ export function formatReadResult(tool: string, data: unknown): string | null {
         : `${d.items.length} task${d.items.length === 1 ? '' : 's'}:`;
       return [
         head,
-        ...d.items.map(t => bullet(t.due ? `${t.title}  (${t.overdue ? 'overdue, was due' : 'due'} ${t.due})` : t.title)),
+        ...d.items.map(t => bullet(t.due ? `${t.title} (${t.overdue ? 'overdue, was due' : 'due'} ${t.due})` : t.title)),
       ].join('\n');
     }
     case 'list_reminders': {
@@ -62,12 +62,12 @@ export function formatReadResult(tool: string, data: unknown): string | null {
       if (!list.length) {
         return 'You have no upcoming reminders.';
       }
-      return ['Upcoming reminders:', ...list.map(r => bullet(`${r.when} — ${r.title}`))].join('\n');
+      return ['Upcoming reminders:', ...list.map(r => bullet(`${r.when}: ${r.title}`))].join('\n');
     }
     case 'suggest_focus': {
       const d = data as { overdue: string[]; today: string[]; next: string[]; openCount: number };
       if (!d.openCount && !d.today.length) {
-        return "Nothing is pending. You're all clear — enjoy it, or add a task to plan ahead.";
+        return "Nothing is pending. You're all clear. Enjoy it, or add a task to plan ahead.";
       }
       const lines: string[] = [];
       if (d.overdue.length) {

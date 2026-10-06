@@ -22,7 +22,7 @@ export async function executeTool(name: string, rawArgs: unknown, ctx: ToolConte
       tool: name,
       args: {},
       readOnly: true,
-      result: { ok: false, summary: `I don't have a tool called "${name}".`, chip: 'Unknown tool' },
+      result: { ok: false, summary: `I can't do that yet.`, chip: 'Unknown tool' },
     };
   }
   const v = validateArgs(tool.args, rawArgs);
@@ -31,7 +31,7 @@ export async function executeTool(name: string, rawArgs: unknown, ctx: ToolConte
       tool: name,
       args: {},
       readOnly: true,
-      result: { ok: false, summary: `I couldn't do that: ${v.error}.`, chip: 'Invalid request' },
+      result: { ok: false, summary: `I couldn't do that. Some details were missing or unclear.`, chip: 'Invalid request' },
     };
   }
   if (tool.sensitive) {
@@ -42,7 +42,7 @@ export async function executeTool(name: string, rawArgs: unknown, ctx: ToolConte
         tool: name,
         args: v.args,
         readOnly: true,
-        result: { ok: false, summary: 'Okay, cancelled.', chip: 'Cancelled' },
+        result: { ok: false, summary: 'Okay, canceled.', chip: 'Canceled' },
       };
     }
   }

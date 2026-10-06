@@ -2,6 +2,7 @@ import React, { useEffect, useRef } from 'react';
 import {
   Animated,
   Easing,
+  Image,
   KeyboardAvoidingView,
   Modal,
   Pressable,
@@ -10,13 +11,16 @@ import {
   Text,
   useWindowDimensions,
   View,
+  type StyleProp,
   type ViewStyle,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
 import { Plus } from 'phosphor-react-native';
 import { useTheme } from '../theme';
 
 const MAX_CONTENT = 720;
+const LOGO = require('../../assets/brand/logo-mark.png');
 
 /** Responsive layout helper: gutters scale with screen width, content is capped on tablets. */
 export function useLayout() {
@@ -25,7 +29,36 @@ export function useLayout() {
   return { width, gutter, maxWidth: MAX_CONTENT, wide: width >= 600 };
 }
 
-/** Safe-area screen with a centered, width-capped content column. */
+/** Left-to-right action gradient fill (buttons, FAB, mic, selected chips). */
+export function AccentFill({ style, children }: { style?: StyleProp<ViewStyle>; children?: React.ReactNode }) {
+  const t = useTheme();
+  return (
+    <LinearGradient colors={t.gradientAccent} start={{ x: 0, y: 0.3 }} end={{ x: 1, y: 0.7 }} style={style}>
+      {children}
+    </LinearGradient>
+  );
+}
+
+/** The Alphadron mascot. */
+export function Logo({ size = 48 }: { size?: number }) {
+  return <Image source={LOGO} style={{ width: size, height: size * 0.85 }} resizeMode="contain" accessibilityLabel="Alphadron" />;
+}
+
+/** Mascot + spaced wordmark, used as the app header. */
+export function Wordmark({ subtitle }: { subtitle?: string }) {
+  const t = useTheme();
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+      <Logo size={50} />
+      <View>
+        <Text style={{ color: t.text, fontSize: 20, fontWeight: '800', letterSpacing: 4 }}>ALPHADRON</Text>
+        {subtitle ? <Text style={{ color: t.textDim, fontSize: 13, marginTop: 1 }}>{subtitle}</Text> : null}
+      </View>
+    </View>
+  );
+}
+
+/** Safe-area screen with a centered, width-capped content column. The backdrop shows through. */
 export function Screen({
   children,
   scroll = true,
@@ -35,16 +68,16 @@ export function Screen({
   scroll?: boolean;
   footer?: React.ReactNode;
 }) {
-  const t = useTheme();
   const { gutter, maxWidth } = useLayout();
   const inner: ViewStyle = { width: '100%', maxWidth, alignSelf: 'center', paddingHorizontal: gutter };
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: t.bg }} edges={['top']}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: 'transparent' }} edges={['top']}>
       {scroll ? (
         <ScrollView
-          contentContainerStyle={[inner, { paddingTop: 12, paddingBottom: 96, gap: 10 }]}
+          contentContainerStyle={[inner, { paddingTop: 12, paddingBottom: 96, gap: 12 }]}
           keyboardShouldPersistTaps="handled"
-          keyboardDismissMode="on-drag">
+          keyboardDismissMode="on-drag"
+          showsVerticalScrollIndicator={false}>
           {children}
         </ScrollView>
       ) : (
@@ -57,9 +90,10 @@ export function Screen({
 
 export function Title({ children }: { children: React.ReactNode }) {
   const t = useTheme();
-  return <Text style={{ color: t.text, fontSize: 28, fontWeight: '700' }}>{children}</Text>;
+  return <Text style={{ color: t.text, fontSize: 30, fontWeight: '800', letterSpacing: 0.3 }}>{children}</Text>;
 }
 
+/** Frosted-glass panel. */
 export function Card({ children, style }: { children: React.ReactNode; style?: ViewStyle }) {
   const t = useTheme();
   return (
@@ -67,9 +101,10 @@ export function Card({ children, style }: { children: React.ReactNode; style?: V
   );
 }
 
+/** Small spaced-out caps header, like "YOUR ROADMAP". */
 export function SectionTitle({ children }: { children: React.ReactNode }) {
   const t = useTheme();
-  return <Text style={[s.section, { color: t.textDim }]}>{children}</Text>;
+  return <Text style={[s.section, { color: t.textDim }]}>{String(children).toUpperCase()}</Text>;
 }
 
 export function Button({
@@ -86,23 +121,20 @@ export function Button({
   flex?: boolean;
 }) {
   const t = useTheme();
-  const bg = kind === 'primary' ? t.accent : 'transparent';
-  const color = kind === 'primary' ? t.onAccent : kind === 'danger' ? t.danger : t.accent;
+  const body = (color: string) => <Text style={{ color, fontWeight: '700', fontSize: 16, letterSpacing: 0.3 }}>{label}</Text>;
   return (
     <Pressable
       accessibilityRole="button"
       onPress={onPress}
       disabled={disabled}
-      style={({ pressed }) => [
-        s.btn,
-        {
-          backgroundColor: bg,
-          borderColor: kind === 'primary' ? bg : t.border,
-          opacity: disabled ? 0.45 : pressed ? 0.8 : 1,
-          flex: flex ? 1 : undefined,
-        },
-      ]}>
-      <Text style={{ color, fontWeight: '600', fontSize: 16 }}>{label}</Text>
+      style={({ pressed }) => [{ opacity: disabled ? 0.45 : pressed ? 0.85 : 1, flex: flex ? 1 : undefined }]}>
+      {kind === 'primary' ? (
+        <AccentFill style={[s.btn, s.btnGlow]}>{body(t.onAccent)}</AccentFill>
+      ) : (
+        <View style={[s.btn, { borderWidth: 1, borderColor: kind === 'danger' ? t.danger : t.border, backgroundColor: t.surface }]}>
+          {body(kind === 'danger' ? t.danger : t.text)}
+        </View>
+      )}
     </Pressable>
   );
 }
@@ -119,20 +151,19 @@ export function Chip({
   icon?: React.ReactNode;
 }) {
   const t = useTheme();
-  return (
-    <Pressable
-      accessibilityRole="button"
-      onPress={onPress}
-      style={({ pressed }) => [
-        s.chip,
-        {
-          borderColor: active ? t.accent : t.border,
-          backgroundColor: active ? t.accent : t.surface,
-          opacity: pressed ? 0.8 : 1,
-        },
-      ]}>
+  const text = (
+    <>
       {icon}
-      <Text style={{ color: active ? t.onAccent : t.text, fontSize: 14, fontWeight: '500' }}>{label}</Text>
+      <Text style={{ color: active ? t.onAccent : t.text, fontSize: 14, fontWeight: '600' }}>{label}</Text>
+    </>
+  );
+  return (
+    <Pressable accessibilityRole="button" onPress={onPress} style={({ pressed }) => ({ opacity: pressed ? 0.8 : 1 })}>
+      {active ? (
+        <AccentFill style={s.chip}>{text}</AccentFill>
+      ) : (
+        <View style={[s.chip, { borderWidth: 1, borderColor: t.border, backgroundColor: t.surface }]}>{text}</View>
+      )}
     </Pressable>
   );
 }
@@ -155,11 +186,10 @@ export function Fab({ onPress, label = 'Add' }: { onPress: () => void; label?: s
       accessibilityRole="button"
       accessibilityLabel={label}
       onPress={onPress}
-      style={({ pressed }) => [
-        s.fab,
-        { backgroundColor: t.accent, bottom: 16 + Math.min(insets.bottom, 8), opacity: pressed ? 0.85 : 1 },
-      ]}>
-      <Plus size={28} color={t.onAccent} weight="bold" />
+      style={({ pressed }) => [s.fab, { bottom: 16 + Math.min(insets.bottom, 8), opacity: pressed ? 0.88 : 1 }]}>
+      <AccentFill style={s.fabInner}>
+        <Plus size={28} color={t.onAccent} weight="bold" />
+      </AccentFill>
     </Pressable>
   );
 }
@@ -202,14 +232,14 @@ export function Sheet({
       statusBarTranslucent
       navigationBarTranslucent>
       <KeyboardAvoidingView behavior="padding" style={{ flex: 1, justifyContent: 'flex-end' }}>
-        <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.5)', opacity: fade }]}>
+        <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(6, 4, 24, 0.62)', opacity: fade }]}>
           <Pressable style={{ flex: 1 }} onPress={onClose} accessibilityLabel="Close" />
         </Animated.View>
         <Animated.View
           style={[
             s.sheet,
             {
-              backgroundColor: t.surface,
+              backgroundColor: t.sheet,
               borderColor: t.border,
               maxWidth,
               paddingBottom: 16 + insets.bottom,
@@ -218,7 +248,7 @@ export function Sheet({
             },
           ]}>
           <View style={[s.grab, { backgroundColor: t.border }]} />
-          {title ? <Text style={{ color: t.text, fontSize: 18, fontWeight: '700', marginBottom: 8 }}>{title}</Text> : null}
+          {title ? <Text style={{ color: t.text, fontSize: 18, fontWeight: '800', marginBottom: 8 }}>{title}</Text> : null}
           {children}
         </Animated.View>
       </KeyboardAvoidingView>
@@ -250,42 +280,47 @@ export function fmtDay(ms: number, now = new Date()): string {
 }
 
 const s = StyleSheet.create({
-  card: { borderWidth: 1, borderRadius: 16, padding: 14, gap: 4 },
-  section: { fontSize: 13, fontWeight: '600', textTransform: 'uppercase', marginTop: 14, marginBottom: 2 },
-  btn: { minHeight: 48, paddingHorizontal: 16, borderRadius: 12, alignItems: 'center', justifyContent: 'center', borderWidth: 1 },
+  card: { borderWidth: 1, borderRadius: 24, padding: 16, gap: 4 },
+  section: { fontSize: 12, fontWeight: '700', letterSpacing: 1.8, marginTop: 14, marginBottom: 2 },
+  btn: { minHeight: 52, paddingHorizontal: 22, borderRadius: 999, alignItems: 'center', justifyContent: 'center' },
+  btnGlow: {
+    shadowColor: '#FF4D8D',
+    shadowOpacity: 0.45,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 6,
+  },
   chip: {
     minHeight: 40,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    borderWidth: 1,
-    borderRadius: 20,
-    paddingHorizontal: 14,
+    borderRadius: 999,
+    paddingHorizontal: 16,
     paddingVertical: 8,
   },
   fab: {
     position: 'absolute',
     right: 20,
-    width: 58,
-    height: 58,
-    borderRadius: 29,
-    alignItems: 'center',
-    justifyContent: 'center',
-    elevation: 6,
-    shadowColor: '#000',
-    shadowOpacity: 0.25,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 3 },
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    shadowColor: '#FF4D8D',
+    shadowOpacity: 0.5,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 8,
   },
+  fabInner: { width: 60, height: 60, borderRadius: 30, alignItems: 'center', justifyContent: 'center' },
   sheet: {
     width: '100%',
     alignSelf: 'center',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
+    borderTopLeftRadius: 30,
+    borderTopRightRadius: 30,
     borderWidth: 1,
     borderBottomWidth: 0,
-    padding: 16,
-    gap: 10,
+    padding: 18,
+    gap: 12,
   },
-  grab: { width: 40, height: 4, borderRadius: 2, alignSelf: 'center', marginBottom: 4 },
+  grab: { width: 44, height: 4, borderRadius: 2, alignSelf: 'center', marginBottom: 4 },
 });
