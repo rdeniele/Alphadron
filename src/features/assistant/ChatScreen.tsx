@@ -10,7 +10,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   ArrowUp,
   Bell,
@@ -20,8 +20,12 @@ import {
   Note,
   Plus,
   Sparkle,
+  SpeakerHigh,
+  SpeakerSlash,
   WarningCircle,
+  X,
 } from 'phosphor-react-native';
+import { useApp } from '../../services/AppState';
 import { PHASE_LABEL, useAssistant } from './AssistantProvider';
 import { TalkButton } from './TalkButton';
 import { RecordingBar } from './RecordingBar';
@@ -32,9 +36,9 @@ import { runtime } from '../../core/runtime';
 import type { ChatMessage } from '../../database/repositories/conversationsRepo';
 
 const SUGGESTIONS = [
+  "Hi! How's it going?",
   'Remind me tomorrow at 9 AM to work on my project',
   'What do I have tomorrow?',
-  'Add task: finish proposal by friday',
   'What should I work on today?',
 ];
 
@@ -144,8 +148,11 @@ function WorkingBubble({ maxWidth }: { maxWidth: number }) {
   );
 }
 
-export function ChatScreen() {
+/** The conversation UI. Lives inside the quick-chat popup (see ChatModal). */
+export function ChatPanel({ onClose }: { onClose: () => void }) {
   const t = useTheme();
+  const insets = useSafeAreaInsets();
+  const { settings, update } = useApp();
   const { maxWidth: contentMax, gutter } = useLayout();
   const { messages, phase, error, send, newChat } = useAssistant();
   const quick = useQuickAdd();
@@ -177,7 +184,7 @@ export function ChatScreen() {
     }
     const v = text;
     setText('');
-    send(v, false);
+    send(v, settings.speakReplies);
   };
 
   const openAdd = (m: AddMode) => {
@@ -188,12 +195,29 @@ export function ChatScreen() {
   const showEmpty = messages.length === 0 && !busy;
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: t.bg }} edges={['top']}>
+    <View style={{ flex: 1, backgroundColor: t.bg, paddingTop: insets.top }}>
       <View style={[s.header, { paddingHorizontal: gutter }]}>
         <Text style={[s.h1, { color: t.text }]}>Chat</Text>
-        <Pressable onPress={newChat} accessibilityRole="button" hitSlop={10}>
-          <Text style={{ color: t.accent, fontWeight: '600' }}>New chat</Text>
-        </Pressable>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 18 }}>
+          <Pressable
+            onPress={() => update('speakReplies', !settings.speakReplies)}
+            accessibilityRole="switch"
+            accessibilityState={{ checked: settings.speakReplies }}
+            accessibilityLabel="Read replies aloud"
+            hitSlop={10}>
+            {settings.speakReplies ? (
+              <SpeakerHigh size={24} color={t.accent} weight="fill" />
+            ) : (
+              <SpeakerSlash size={24} color={t.textDim} />
+            )}
+          </Pressable>
+          <Pressable onPress={newChat} accessibilityRole="button" hitSlop={10}>
+            <Text style={{ color: t.accent, fontWeight: '600' }}>New chat</Text>
+          </Pressable>
+          <Pressable onPress={onClose} accessibilityRole="button" accessibilityLabel="Close chat" hitSlop={10}>
+            <X size={26} color={t.text} />
+          </Pressable>
+        </View>
       </View>
 
       <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
@@ -219,8 +243,10 @@ export function ChatScreen() {
             showEmpty ? (
               <View style={s.empty}>
                 <Sparkle size={36} color={t.accent} weight="fill" />
-                <Text style={{ color: t.text, fontSize: 20, fontWeight: '600' }}>How can I help?</Text>
-                <Text style={{ color: t.textDim, textAlign: 'center' }}>Tap an example or type your own.</Text>
+                <Text style={{ color: t.text, fontSize: 20, fontWeight: '600' }}>Hi, I'm Alphadex</Text>
+                <Text style={{ color: t.textDim, textAlign: 'center' }}>
+                  Chat with me about anything, or ask me to remind you, add a task, or check your day. Try one:
+                </Text>
                 <View style={{ gap: 8, width: '100%', marginTop: 8 }}>
                   {SUGGESTIONS.map(x => (
                     <Pressable
@@ -249,7 +275,7 @@ export function ChatScreen() {
           }
         />
 
-        <View style={[s.barWrap, { borderTopColor: t.border, backgroundColor: t.bg }]}>
+        <View style={[s.barWrap, { borderTopColor: t.border, backgroundColor: t.bg, paddingBottom: 8 + insets.bottom }]}>
           <View style={[s.bar, { maxWidth: contentMax, paddingHorizontal: gutter - 6 }]}>
             {listening ? (
               <RecordingBar />
@@ -312,7 +338,7 @@ export function ChatScreen() {
           }}
         />
       </Sheet>
-    </SafeAreaView>
+    </View>
   );
 }
 

@@ -1,12 +1,14 @@
 import { PermissionsAndroid, Platform } from 'react-native';
 import AudioRecord from '@fugood/react-native-audio-pcm-stream';
 import { initWhisper, type WhisperContext } from 'whisper.rn/index';
-import { MODEL_MANIFEST, type ModelId } from '../ai/modelManifest';
+import { MODEL_MANIFEST } from '../ai/modelManifest';
 import { getModelInfo, markLoaded } from '../ai/modelManager';
-import { micSourceId, type MicSource } from './micOptions';
+import { micSourceId, nextMic, type MicSetting, type MicSource } from './micOptions';
 import { floatToPcm16, SILENCE_LEVEL, isPromptEcho, SAMPLE_RATE, base64ToBytes, chunkLevel, cleanTranscript, pcm16ToFloat32, prepareAudio } from './audioUtils';
 
 const MAX_SECONDS = 120;
+/** A recording whose peak is at least this loud proves the microphone works. */
+const WORKING_LEVEL = 0.08;
 const toPath = (uri: string) => uri.replace(/^file:\/\//, '');
 
 /** Words the user is likely to say; nudges Whisper toward them (fewer "remind me" -> "remain me" errors). */
@@ -28,6 +30,10 @@ async function stopRecorder(): Promise<void> {
  * Tap-to-record speech recognition using Whisper (whisper.cpp) on-device.
  * The microphone is open only between startListening() and stopAndTranscribe()/cancel().
  * Whisper is loaded for the transcription and released afterwards to save RAM.
+ *
+ * Microphone source: Android phones differ in which AudioRecord source delivers audio.
+ * In 'auto' mode, a silent recording rotates to the next source and a working one is
+ * remembered, so every phone ends up on a microphone that works.
  */
 export class SpeechToTextService {
   private chunks: Uint8Array[] = [];
@@ -35,21 +41,35 @@ export class SpeechToTextService {
   private wired = false;
   private autoStop: ReturnType<typeof setTimeout> | null = null;
   private ctx: WhisperContext | null = null;
-  state: SttState = 'idle';
-  /** Android audio source to record from (user-selectable in Settings). */
-  micSource: MicSource = 'mic';
-  /** Loudness stats of the last recording, to tell "silent mic" from "unclear speech". */
-  lastRecording: { seconds: number; peak: number } = { seconds: 0, peak: 0 };
   private peak = 0;
+  state: SttState = 'idle';
+  /** User's choice: 'auto' or a specific source. */
+  setting: MicSetting = 'auto';
+  /** Source used in auto mode (the last one that worked, or the next one to try). */
+  resolved: MicSource = 'mic';
+  /** Loudness stats of the last recording, to tell "silent mic" from "unclear speech". */
+  lastRecording: { seconds: number; peak: number; source: MicSource; rotatedTo: MicSource | null } = {
+    seconds: 0,
+    peak: 0,
+    source: 'mic',
+    rotatedTo: null,
+  };
   onStateChange?: (s: SttState) => void;
   /** Live input loudness 0..1 while recording (drives the level meter). */
   onLevel?: (level: number) => void;
   /** Fired if the recording hit the maximum length. */
   onAutoStop?: () => void;
+  /** Fired when auto mode settles on / switches to a source (so it can be saved). */
+  onResolved?: (source: MicSource) => void;
 
   private set(s: SttState) {
     this.state = s;
     this.onStateChange?.(s);
+  }
+
+  /** The source that will be used for the next recording. */
+  currentSource(): MicSource {
+    return this.setting === 'auto' ? this.resolved : this.setting;
   }
 
   async requestPermission(): Promise<boolean> {
@@ -65,19 +85,13 @@ export class SpeechToTextService {
     return res === PermissionsAndroid.RESULTS.GRANTED;
   }
 
-  /** Prefers the more accurate "small" model when it has been downloaded. */
-  private async resolveModel(): Promise<{ id: ModelId; path: string } | null> {
-    for (const id of ['whisper_small', 'whisper'] as ModelId[]) {
-      const info = await getModelInfo(MODEL_MANIFEST.find(m => m.id === id)!);
-      if (info.status === 'downloaded' && info.localPath) {
-        return { id, path: info.localPath };
-      }
-    }
-    return null;
+  private async modelPath(): Promise<string | null> {
+    const info = await getModelInfo(MODEL_MANIFEST.find(m => m.id === 'whisper')!);
+    return info.status === 'downloaded' && info.localPath ? info.localPath : null;
   }
 
   async isReady(): Promise<boolean> {
-    return (await this.resolveModel()) !== null;
+    return (await this.modelPath()) !== null;
   }
 
   async startListening(): Promise<void> {
@@ -93,7 +107,14 @@ export class SpeechToTextService {
     this.chunks = [];
     this.bytes = 0;
     this.peak = 0;
-    AudioRecord.init({ sampleRate: SAMPLE_RATE, channels: 1, bitsPerSample: 16, audioSource: micSourceId(this.micSource), bufferSize: 4096, wavFile: '' });
+    AudioRecord.init({
+      sampleRate: SAMPLE_RATE,
+      channels: 1,
+      bitsPerSample: 16,
+      audioSource: micSourceId(this.currentSource()),
+      bufferSize: 4096,
+      wavFile: '',
+    });
     if (!this.wired) {
       AudioRecord.on('data', b64 => {
         if (this.state !== 'listening') {
@@ -115,6 +136,21 @@ export class SpeechToTextService {
     this.autoStop = setTimeout(() => this.onAutoStop?.(), MAX_SECONDS * 1000);
   }
 
+  /** Auto mode bookkeeping after a recording: lock in a working source, rotate off a silent one. */
+  private learnFromRecording(source: MicSource, peak: number, seconds: number) {
+    let rotatedTo: MicSource | null = null;
+    if (this.setting === 'auto' && seconds >= 1) {
+      if (peak >= WORKING_LEVEL) {
+        this.onResolved?.(source);
+      } else if (peak < SILENCE_LEVEL) {
+        rotatedTo = nextMic(source);
+        this.resolved = rotatedTo;
+        this.onResolved?.(rotatedTo);
+      }
+    }
+    this.lastRecording = { seconds, peak, source, rotatedTo };
+  }
+
   /** Stops recording and returns the transcript ('' if nothing was said). */
   async stopAndTranscribe(): Promise<string> {
     if (this.state !== 'listening') {
@@ -124,11 +160,12 @@ export class SpeechToTextService {
       clearTimeout(this.autoStop);
       this.autoStop = null;
     }
+    const source = this.currentSource();
     await stopRecorder();
     this.set('transcribing');
     try {
       const seconds = this.bytes / 2 / SAMPLE_RATE;
-      this.lastRecording = { seconds, peak: this.peak };
+      this.learnFromRecording(source, this.peak, seconds);
       if (seconds < 0.5 || this.peak < SILENCE_LEVEL) {
         return ''; // too short or silent: nothing to transcribe
       }
@@ -169,12 +206,12 @@ export class SpeechToTextService {
     if (this.ctx) {
       return this.ctx;
     }
-    const found = await this.resolveModel();
-    if (!found) {
+    const path = await this.modelPath();
+    if (!path) {
       throw new Error('The speech model is not downloaded yet.');
     }
-    this.ctx = await initWhisper({ filePath: toPath(found.path) });
-    markLoaded(found.id, true);
+    this.ctx = await initWhisper({ filePath: toPath(path) });
+    markLoaded('whisper', true);
     return this.ctx;
   }
 
@@ -182,7 +219,6 @@ export class SpeechToTextService {
     const c = this.ctx;
     this.ctx = null;
     markLoaded('whisper', false);
-    markLoaded('whisper_small', false);
     await c?.release().catch(() => undefined);
   }
 }

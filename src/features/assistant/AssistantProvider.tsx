@@ -7,6 +7,8 @@ import {
   type ChatMessage,
 } from '../../database/repositories/conversationsRepo';
 import { useApp } from '../../services/AppState';
+import { getPreference, setPreference } from '../../database/repositories/settingsRepo';
+import { MIC_OPTIONS, micLabel, type MicSource } from '../../core/voice/micOptions';
 
 export interface LastTurn {
   user: string;
@@ -18,6 +20,8 @@ export interface LastTurn {
 interface AssistantCtx {
   /** Most recent exchange, so screens other than Chat (e.g. Home) can show the result. */
   lastTurn: LastTurn | null;
+  /** What speech recognition just heard, shown while the assistant works on it. */
+  heard: string | null;
   dismissLastTurn: () => void;
   messages: ChatMessage[];
   phase: Phase;
@@ -48,6 +52,7 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
   const [error, setError] = useState<string | null>(null);
   const [dataVersion, setDataVersion] = useState(0);
   const [lastTurn, setLastTurn] = useState<LastTurn | null>(null);
+  const [heard, setHeard] = useState<string | null>(null);
   const starting = useRef<Promise<void> | null>(null);
 
   const reload = useCallback(async () => {
@@ -55,14 +60,23 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
     setMessages(await listMessages(id, 100));
   }, []);
 
+  // Microphone: 'auto' remembers the source that worked on this phone.
   useEffect(() => {
-    runtime.stt.micSource = settings.micSource;
+    runtime.stt.setting = settings.micSource;
   }, [settings.micSource]);
-
-  // Apply the model chosen in Settings (unloads the other one if needed).
   useEffect(() => {
-    runtime.provider.setPreferred(settings.aiModel);
-  }, [settings.aiModel]);
+    getPreference('mic_resolved').then(v => {
+      if (v && MIC_OPTIONS.some(o => o.key === v)) {
+        runtime.stt.resolved = v as MicSource;
+      }
+    });
+    runtime.stt.onResolved = s => {
+      setPreference('mic_resolved', s);
+    };
+    return () => {
+      runtime.stt.onResolved = undefined;
+    };
+  }, []);
 
   useEffect(() => {
     runtime.onPhase = setPhase;
@@ -129,13 +143,20 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
     try {
       const text = await runtime.stopTalking();
       if (text) {
-        await send(text, true);
+        setHeard(text);
+        try {
+          await send(text, true);
+        } finally {
+          setHeard(null);
+        }
       } else {
-        const { peak } = runtime.stt.lastRecording;
+        const { peak, rotatedTo } = runtime.stt.lastRecording;
         setError(
-          peak < 0.05
-            ? 'The microphone recorded silence. Try another microphone in Settings → Microphone, then run the mic test.'
-            : "I couldn't make out words. Speak a little closer and clearly, or try a different microphone in Settings.",
+          rotatedTo
+            ? `That microphone was silent, so I switched to the ${micLabel(rotatedTo).toLowerCase()}. Tap the mic and try again.`
+            : peak < 0.05
+              ? 'The microphone recorded silence. Check Settings → Microphone and run the mic test.'
+              : "I couldn't make out words. Speak a little closer and clearly, then tap ✓.",
         );
       }
     } catch (e) {
@@ -173,8 +194,8 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
   }, [reload]);
 
   const value = useMemo(
-    () => ({ lastTurn, dismissLastTurn, messages, phase, error, dataVersion, send, startRecording, finishRecording, cancelRecording, stopSpeaking, newChat, reload, refresh }),
-    [lastTurn, dismissLastTurn, messages, phase, error, dataVersion, send, startRecording, finishRecording, cancelRecording, stopSpeaking, newChat, reload, refresh],
+    () => ({ lastTurn, heard, dismissLastTurn, messages, phase, error, dataVersion, send, startRecording, finishRecording, cancelRecording, stopSpeaking, newChat, reload, refresh }),
+    [lastTurn, heard, dismissLastTurn, messages, phase, error, dataVersion, send, startRecording, finishRecording, cancelRecording, stopSpeaking, newChat, reload, refresh],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

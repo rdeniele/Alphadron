@@ -8,9 +8,44 @@
 
 import { normalizeSpoken } from './spoken';
 
+/** A question the assistant just asked, whose answer completes an action. */
+export type Pending =
+  | { kind: 'reminder-time'; title: string; repeat?: 'daily' | 'weekly' }
+  | { kind: 'reminder-title'; when: string; repeat?: 'daily' | 'weekly' }
+  | { kind: 'task-title'; due?: string };
+
 export type FastResult =
   | { kind: 'tool'; tool: string; args: Record<string, string | number | boolean> }
-  | { kind: 'reply'; text: string };
+  | { kind: 'reply'; text: string; pending?: Pending };
+
+/**
+ * Interprets the user's answer to a question we just asked.
+ * Returns an action, a cancel acknowledgement, or null (not an answer: handle normally).
+ */
+export function resolvePending(p: Pending, input: string): FastResult | 'cancel' | null {
+  const text = normalizeSpoken(input);
+  if (/^(?:no|nope|never ?mind|forget it|cancel|skip|stop|nothing|don'?t)\b/i.test(text)) {
+    return 'cancel';
+  }
+  if (p.kind === 'reminder-time') {
+    const { when } = extractWhen(text);
+    return when
+      ? { kind: 'tool', tool: 'create_reminder', args: { title: p.title, when, ...(p.repeat ? { repeat: p.repeat } : {}) } }
+      : null;
+  }
+  if (p.kind === 'reminder-title') {
+    const title = cleanTitle(extractWhen(text).rest);
+    return title.length > 1
+      ? { kind: 'tool', tool: 'create_reminder', args: { title, when: p.when, ...(p.repeat ? { repeat: p.repeat } : {}) } }
+      : null;
+  }
+  const { when, rest } = extractWhen(text);
+  const title = cleanTitle(rest);
+  const due = when || p.due;
+  return title.length > 1
+    ? { kind: 'tool', tool: 'create_task', args: { title, ...(due ? { due_date: due } : {}) } }
+    : null;
+}
 
 const WEEKDAYS = 'monday|tuesday|wednesday|thursday|friday|saturday|sunday';
 const MONTHS = 'january|february|march|april|may|june|july|august|september|october|november|december';
@@ -100,12 +135,17 @@ export function fastPath(input: string): FastResult | null {
     const { when, rest } = extractWhen(noRepeat);
     const title = cleanTitle(rest);
     if (!title) {
-      return { kind: 'reply', text: 'What should I remind you about?' };
+      return {
+        kind: 'reply',
+        text: when ? 'Sure! What should I remind you about?' : 'Of course! What should I remind you about, and when?',
+        pending: when ? { kind: 'reminder-title', when, ...(repeat ? { repeat } : {}) } : undefined,
+      };
     }
     if (!when) {
       return {
         kind: 'reply',
-        text: `When should I remind you to ${title.charAt(0).toLowerCase() + title.slice(1)}? For example: "tomorrow at 9 AM".`,
+        text: `Sure! When should I remind you to ${title.charAt(0).toLowerCase() + title.slice(1)}? For example: "tomorrow at 9 AM".`,
+        pending: { kind: 'reminder-time', title, ...(repeat ? { repeat } : {}) },
       };
     }
     return {
@@ -121,7 +161,11 @@ export function fastPath(input: string): FastResult | null {
     const { when, rest } = extractWhen(at[1]);
     const title = cleanTitle(rest);
     if (!title) {
-      return { kind: 'reply', text: 'What is the task?' };
+      return {
+        kind: 'reply',
+        text: 'Sure! What is the task?',
+        pending: { kind: 'task-title', ...(when ? { due: when } : {}) },
+      };
     }
     return { kind: 'tool', tool: 'create_task', args: { title, ...(when ? { due_date: when } : {}) } };
   }

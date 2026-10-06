@@ -6,6 +6,7 @@ import { TalkButton } from './TalkButton';
 import { RecordingBar } from './RecordingBar';
 import { PHASE_LABEL, useAssistant } from './AssistantProvider';
 import { useQuickAdd } from '../common/QuickAdd';
+import { useChatModal } from './ChatModal';
 import { Card, Chip, Empty, Row, Screen, SectionTitle, fmtTime, useLayout } from '../../components/ui';
 import { useTheme } from '../../theme';
 import { useData } from '../../services/useData';
@@ -114,8 +115,9 @@ function greeting(name: string | null): string {
 export function HomeScreen() {
   const t = useTheme();
   const nav = useNavigation<{ navigate: (name: string) => void }>();
-  const { error, refresh, phase, lastTurn, dismissLastTurn, stopSpeaking } = useAssistant();
+  const { error, refresh, phase, lastTurn, heard, dismissLastTurn, stopSpeaking } = useAssistant();
   const quick = useQuickAdd();
+  const chat = useChatModal();
   const [data, reload] = useData(loadToday, EMPTY);
   const [filter, setFilter] = useState<Filter>('all');
   const [name, setName] = useState<string | null>(null);
@@ -172,7 +174,7 @@ export function HomeScreen() {
     <View style={{ backgroundColor: t.surface, borderTopColor: t.border, borderTopWidth: 1 }}>
       <HomeDock
         onAdd={() => quick.open('reminder')}
-        onChat={() => nav.navigate('Chat')}
+        onChat={() => chat.open()}
         error={error}
       />
     </View>
@@ -186,6 +188,7 @@ export function HomeScreen() {
       {phase !== 'idle' && phase !== 'listening' ? (
         <Card style={{ borderColor: t.accent }}>
           <Text style={{ color: t.accent, fontWeight: '700' }}>{PHASE_LABEL[phase] || 'Working…'}</Text>
+          {heard ? <Text style={{ color: t.text }}>I heard: “{heard}”</Text> : null}
           {phase === 'speaking' ? (
             <Pressable onPress={stopSpeaking} accessibilityRole="button">
               <Text style={{ color: t.accent, fontSize: 13, fontWeight: '600' }}>Stop speaking</Text>
@@ -209,7 +212,7 @@ export function HomeScreen() {
               <Text style={{ color: lastTurn.chip.ok ? t.ok : t.danger, fontSize: 13 }}>{lastTurn.chip.label}</Text>
             </View>
           ) : null}
-          <Pressable onPress={() => nav.navigate('Chat')} accessibilityRole="button">
+          <Pressable onPress={() => chat.open()} accessibilityRole="button">
             <Text style={{ color: t.accent, fontSize: 13, fontWeight: '600' }}>Open in chat</Text>
           </Pressable>
         </Card>

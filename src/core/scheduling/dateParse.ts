@@ -152,9 +152,9 @@ export function parseWhen(input: string, now: Date = new Date()): ParsedWhen | n
   let clock = parseClock(s);
   if (clock && clock.meridiem === null && clock.hour < 12) {
     // "tonight at 8" / "this evening at 6" mean PM; "tomorrow morning at 9" means AM.
-    if (/(tonight|evening|afternoon|night)/.test(s)) {
+    if (/\b(tonight|evening|afternoon|night)\b/.test(s)) {
       clock = { ...clock, meridiem: 'pm' };
-    } else if (/morning/.test(s)) {
+    } else if (/\bmorning\b/.test(s)) {
       clock = { ...clock, meridiem: 'am' };
     }
   }

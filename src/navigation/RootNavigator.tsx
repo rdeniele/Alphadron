@@ -1,9 +1,9 @@
 import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { CalendarCheck, ChatCircleText, GearSix, House, Notebook } from 'phosphor-react-native';
+import { CalendarCheck, GearSix, House, Notebook } from 'phosphor-react-native';
 import { QuickAddProvider } from '../features/common/QuickAdd';
 import { HomeScreen } from '../features/assistant/HomeScreen';
-import { ChatScreen } from '../features/assistant/ChatScreen';
+import { ChatModalProvider } from '../features/assistant/ChatModal';
 import { PlanScreen } from '../features/tasks/PlanScreen';
 import { MemoryScreen } from '../features/memory/MemoryScreen';
 import { SettingsScreen } from '../features/settings/SettingsScreen';
@@ -25,6 +25,7 @@ export function RootNavigator() {
   return (
     <AssistantProvider>
       <QuickAddProvider>
+      <ChatModalProvider>
       <Tab.Navigator
         screenOptions={{
           headerShown: false,
@@ -35,11 +36,11 @@ export function RootNavigator() {
           tabBarStyle: { backgroundColor: t.surface, borderTopColor: t.border },
         }}>
         <Tab.Screen name="Home" component={HomeScreen} options={{ tabBarIcon: (p: IconProps) => <House {...p} /> }} />
-        <Tab.Screen name="Chat" component={ChatScreen} options={{ tabBarIcon: (p: IconProps) => <ChatCircleText {...p} /> }} />
         <Tab.Screen name="Plan" component={PlanScreen} options={{ tabBarIcon: (p: IconProps) => <CalendarCheck {...p} /> }} />
         <Tab.Screen name="Notes" component={MemoryScreen} options={{ tabBarIcon: (p: IconProps) => <Notebook {...p} /> }} />
         <Tab.Screen name="Settings" component={SettingsScreen} options={{ tabBarIcon: (p: IconProps) => <GearSix {...p} /> }} />
       </Tab.Navigator>
+      </ChatModalProvider>
       </QuickAddProvider>
     </AssistantProvider>
   );

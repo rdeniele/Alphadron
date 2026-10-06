@@ -3,6 +3,7 @@ import { Text, View } from 'react-native';
 import { Button, Card } from '../../components/ui';
 import { useTheme } from '../../theme';
 import { runtime } from '../../core/runtime';
+import { micLabel } from '../../core/voice/micOptions';
 
 const BARS = 36;
 const MAX_TEST_SECONDS = 8;
@@ -15,7 +16,7 @@ export function MicTest() {
   const [stage, setStage] = useState<Stage>('idle');
   const [bars, setBars] = useState<number[]>(new Array(BARS).fill(0));
   const [secs, setSecs] = useState(0);
-  const [result, setResult] = useState<{ text: string; peak: number } | null>(null);
+  const [result, setResult] = useState<{ text: string; peak: number; rotatedTo: string | null } | null>(null);
   const [error, setError] = useState('');
   const levels = useRef<number[]>(new Array(BARS).fill(0));
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -34,7 +35,8 @@ export function MicTest() {
     setStage('transcribing');
     try {
       const text = await runtime.stt.stopAndTranscribe();
-      setResult({ text, peak: runtime.stt.lastRecording.peak });
+      const rec = runtime.stt.lastRecording;
+      setResult({ text, peak: rec.peak, rotatedTo: rec.rotatedTo ? micLabel(rec.rotatedTo) : null });
     } catch (e) {
       setError((e as Error).message);
     }
@@ -98,6 +100,11 @@ export function MicTest() {
 
       {result ? (
         <View style={{ gap: 4 }}>
+          {result.rotatedTo ? (
+            <Text style={{ color: t.accent }}>
+              That microphone was silent, so I switched to the {result.rotatedTo.toLowerCase()}. Tap Test again.
+            </Text>
+          ) : null}
           <Text style={{ color: verdict(result.peak).color }}>
             Level {Math.round(result.peak * 100)}% — {verdict(result.peak).text}
           </Text>

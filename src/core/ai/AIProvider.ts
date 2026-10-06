@@ -26,7 +26,7 @@ export interface AIProvider {
   /** Frees the model's memory. */
   unload(): Promise<void>;
   /** Output constrained to a JSON schema (grammar-enforced for local models). */
-  generateJson(messages: ChatTurn[], schema: object, opts?: { maxTokens?: number }): Promise<string>;
+  generateJson(messages: ChatTurn[], schema: object, opts?: { maxTokens?: number; temperature?: number }): Promise<string>;
   generateText(messages: ChatTurn[], opts?: { maxTokens?: number }): Promise<string>;
   stop(): Promise<void>;
 }

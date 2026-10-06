@@ -9,11 +9,16 @@ import { useAssistant } from '../assistant/AssistantProvider';
 import { confirmAction } from '../../core/permissions/confirm';
 import { getPreference, setPreference } from '../../database/repositories/settingsRepo';
 import { runtime } from '../../core/runtime';
-import { MIC_OPTIONS } from '../../core/voice/micOptions';
+import { MIC_OPTIONS, micLabel, type MicSetting } from '../../core/voice/micOptions';
 import { MicTest } from './MicTest';
 import { clearAllConversations } from '../../database/repositories/conversationsRepo';
 
 const MODES: ThemeMode[] = ['system', 'light', 'dark'];
+
+const MIC_CHOICES: { key: MicSetting; label: string; hint: string }[] = [
+  { key: 'auto', label: 'Automatic (recommended)', hint: 'Finds a microphone that works on your phone.' },
+  ...MIC_OPTIONS.map(o => ({ key: o.key as MicSetting, label: o.label, hint: o.hint })),
+];
 
 function Diagnostics() {
   const t = useTheme();
@@ -21,11 +26,11 @@ function Diagnostics() {
   const st = runtime.provider.lastStats;
   return (
     <Card>
-      <Text style={{ color: t.text, fontWeight: '600' }}>Last model reply</Text>
+      <Text style={{ color: t.text, fontWeight: '600' }}>Last AI reply</Text>
       <Text style={{ color: t.textDim, fontSize: 13 }}>
         {st
           ? `${st.tokensPerSecond} tokens/s · read ${st.promptTokens} prompt tokens in ${st.promptMs} ms (${st.cachedTokens} cached) · wrote ${st.genTokens} tokens in ${st.genMs} ms`
-          : 'No model reply yet. Ask something open-ended in Chat.'}
+          : 'No AI reply yet. Chat about something open-ended first.'}
       </Text>
       <Button label="Refresh" kind="ghost" onPress={() => force(x => x + 1)} />
     </Card>
@@ -59,7 +64,7 @@ export function SettingsScreen() {
         value={name}
         onChangeText={setName}
         onEndEditing={() => setPreference('user_name', name)}
-        placeholder="Your name (optional)"
+        placeholder="Your name (optional, so I can greet you)"
         placeholderTextColor={t.textDim}
         style={{ color: t.text, fontSize: 16, minHeight: 48, borderWidth: 1, borderColor: t.border, backgroundColor: t.surface, borderRadius: 12, paddingHorizontal: 14 }}
       />
@@ -71,26 +76,23 @@ export function SettingsScreen() {
         ))}
       </Row>
 
-      <SectionTitle>Memory & privacy</SectionTitle>
+      <SectionTitle>Voice</SectionTitle>
       <Card>
         <Row gap={12}>
-          <Text style={{ color: t.text, flex: 1, fontSize: 16 }}>Remember things I ask it to</Text>
-          <Switch value={settings.memoryEnabled} onValueChange={v => update('memoryEnabled', v)} />
+          <View style={{ flex: 1 }}>
+            <Text style={{ color: t.text, fontSize: 16 }}>Read replies aloud</Text>
+            <Text style={{ color: t.textDim, fontSize: 12 }}>Replies to your voice are always spoken. Turn this on to hear typed chats too.</Text>
+          </View>
+          <Switch value={settings.speakReplies} onValueChange={v => update('speakReplies', v)} />
         </Row>
-        <Text style={{ color: t.textDim, fontSize: 13, marginTop: 6 }}>
-          Everything stays on this phone. Chats, tasks, reminders, notes and memories are never sent anywhere. The microphone is only used while you hold the talk button.
-        </Text>
       </Card>
-      <Button label="Clear chat history" kind="danger" onPress={clearChats} />
-
-      <SectionTitle>Status</SectionTitle>
-      <Text style={{ color: t.text }}>{online ? 'Online (not required)' : 'Offline — everything still works'}</Text>
 
       <SectionTitle>Microphone</SectionTitle>
       <Text style={{ color: t.textDim, fontSize: 13 }}>
-        If voice isn't recognized, try another source and run the test. Some phones only work with one of them.
+        Phones differ in which microphone input works. Automatic switches by itself if one records silence
+        {settings.micSource === 'auto' ? ` (now using: ${micLabel(runtime.stt.resolved).toLowerCase()})` : ''}.
       </Text>
-      {MIC_OPTIONS.map(o => (
+      {MIC_CHOICES.map(o => (
         <Pressable
           key={o.key}
           onPress={() => update('micSource', o.key)}
@@ -126,18 +128,24 @@ export function SettingsScreen() {
       ))}
       <MicTest />
 
-      <SectionTitle>AI model for open-ended questions</SectionTitle>
-      <Row wrap>
-        <Chip label="Fast (0.6B)" active={settings.aiModel === 'qwen3_fast'} onPress={() => update('aiModel', 'qwen3_fast')} />
-        <Chip label="Better quality (1.7B)" active={settings.aiModel === 'qwen3'} onPress={() => update('aiModel', 'qwen3')} />
-      </Row>
-      <Text style={{ color: t.textDim, fontSize: 13 }}>
-        Reminders, tasks, notes and schedule questions never wait on the model. This only affects chat.
-      </Text>
-      <Diagnostics />
+      <SectionTitle>Memory & privacy</SectionTitle>
+      <Card>
+        <Row gap={12}>
+          <Text style={{ color: t.text, flex: 1, fontSize: 16 }}>Remember things I ask it to</Text>
+          <Switch value={settings.memoryEnabled} onValueChange={v => update('memoryEnabled', v)} />
+        </Row>
+        <Text style={{ color: t.textDim, fontSize: 13, marginTop: 6 }}>
+          Everything stays on this phone. Chats, tasks, reminders, notes and memories are never sent anywhere. The microphone only records after you tap it.
+        </Text>
+      </Card>
+      <Button label="Clear chat history" kind="danger" onPress={clearChats} />
 
-      <SectionTitle>AI models</SectionTitle>
+      <SectionTitle>Offline AI (about 560 MB total)</SectionTitle>
+      <Text style={{ color: t.textDim, fontSize: 13 }}>
+        {online ? 'Online — only needed to download these once.' : 'Offline — everything still works.'}
+      </Text>
       <ModelsPanel />
+      <Diagnostics />
     </Screen>
   );
 }

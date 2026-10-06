@@ -7,6 +7,7 @@ import { RootNavigator } from './src/navigation/RootNavigator';
 import { ThemeProvider, useTheme } from './src/theme';
 import { rescheduleAll } from './src/core/reminders/scheduler';
 import { runtime } from './src/core/runtime';
+import { removeLegacyModels } from './src/core/ai/modelManager';
 
 function Themed() {
   const { settings } = useApp();
@@ -22,6 +23,7 @@ function Shell() {
   useEffect(() => {
     // Re-register pending reminders on every launch (survives reboot/update).
     rescheduleAll().catch(() => undefined);
+    removeLegacyModels().catch(() => undefined);
     return () => {
       runtime.releaseAll();
     };

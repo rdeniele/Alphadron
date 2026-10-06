@@ -4,18 +4,18 @@ export interface AppSettings {
   theme: 'system' | 'light' | 'dark';
   memoryEnabled: boolean;
   onboardingDone: boolean;
-  /** Which Qwen3 model answers open-ended questions. */
-  aiModel: 'qwen3_fast' | 'qwen3';
-  /** Which Android microphone source to record from. */
-  micSource: 'mic' | 'voice' | 'camcorder' | 'communication' | 'unprocessed';
+  /** Which Android microphone source to record from ('auto' finds one that works). */
+  micSource: 'auto' | 'mic' | 'voice' | 'camcorder' | 'communication' | 'unprocessed';
+  /** Read assistant replies aloud even when the question was typed. */
+  speakReplies: boolean;
 }
 
 export const defaultSettings: AppSettings = {
   theme: 'system',
   memoryEnabled: true,
   onboardingDone: false,
-  aiModel: 'qwen3_fast',
-  micSource: 'mic',
+  micSource: 'auto',
+  speakReplies: false,
 };
 
 export async function loadSettings(): Promise<AppSettings> {

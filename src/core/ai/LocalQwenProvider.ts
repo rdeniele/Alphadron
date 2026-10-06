@@ -1,10 +1,9 @@
 import { initLlama, type LlamaContext } from 'llama.rn';
 import { ModelNotReadyError, type AIProvider, type ChatTurn, type GenStats } from './AIProvider';
-import { MODEL_MANIFEST, type ModelId } from './modelManifest';
+import { MODEL_MANIFEST } from './modelManifest';
 import { getModelInfo, markLoaded } from './modelManager';
 
 const toPath = (uri: string) => uri.replace(/^file:\/\//, '');
-const QWEN_IDS: ModelId[] = ['qwen3_fast', 'qwen3'];
 
 type Timings = {
   prompt_n: number;
@@ -19,23 +18,10 @@ export class LocalQwenProvider implements AIProvider {
   readonly id = 'local-qwen3';
   lastStats: GenStats | null = null;
   private ctx: LlamaContext | null = null;
-  private loadedId: ModelId | null = null;
-  private preferred: ModelId = 'qwen3_fast';
   private loading: Promise<void> | null = null;
 
   isLoaded() {
     return this.ctx !== null;
-  }
-
-  /** Switches which model is used; a loaded different model is released. */
-  async setPreferred(id: ModelId) {
-    if (!QWEN_IDS.includes(id) || id === this.preferred) {
-      return;
-    }
-    this.preferred = id;
-    if (this.ctx && this.loadedId !== id) {
-      await this.unload();
-    }
   }
 
   load(): Promise<void> {
@@ -50,34 +36,21 @@ export class LocalQwenProvider implements AIProvider {
     return this.loading;
   }
 
-  /** Preferred model if downloaded, otherwise whichever Qwen is available. */
-  private async resolveModel() {
-    const order = [this.preferred, ...QWEN_IDS.filter(i => i !== this.preferred)];
-    for (const id of order) {
-      const info = await getModelInfo(MODEL_MANIFEST.find(m => m.id === id)!);
-      if (info.status === 'downloaded' && info.localPath) {
-        return { id, path: info.localPath };
-      }
-    }
-    return null;
-  }
-
   private async doLoad() {
-    const found = await this.resolveModel();
-    if (!found) {
+    const info = await getModelInfo(MODEL_MANIFEST.find(m => m.id === 'qwen3_fast')!);
+    if (info.status !== 'downloaded' || !info.localPath) {
       throw new ModelNotReadyError();
     }
     try {
       this.ctx = await initLlama({
-        model: toPath(found.path),
+        model: toPath(info.localPath),
         n_ctx: 1536,
         n_batch: 256,
         n_threads: 4,
         n_gpu_layers: 0, // CPU: the most compatible choice across phones
         use_mlock: false,
       });
-      this.loadedId = found.id;
-      markLoaded(found.id, true);
+      markLoaded('qwen3_fast', true);
     } catch (e) {
       throw new Error(`Couldn't load the AI model (${(e as Error).message}). The file may be corrupted or the phone is low on memory. Try redownloading it in Settings.`);
     }
@@ -85,12 +58,8 @@ export class LocalQwenProvider implements AIProvider {
 
   async unload() {
     const c = this.ctx;
-    const id = this.loadedId;
     this.ctx = null;
-    this.loadedId = null;
-    if (id) {
-      markLoaded(id, false);
-    }
+    markLoaded('qwen3_fast', false);
     if (c) {
       await c.release().catch(() => undefined);
     }
@@ -117,15 +86,17 @@ export class LocalQwenProvider implements AIProvider {
     };
   }
 
-  async generateJson(messages: ChatTurn[], schema: object, opts?: { maxTokens?: number }) {
+  async generateJson(messages: ChatTurn[], schema: object, opts?: { maxTokens?: number; temperature?: number }) {
     const res = await this.requireCtx().completion({
       messages,
       jinja: true,
       chat_template_kwargs: { enable_thinking: false },
       response_format: { type: 'json_schema', json_schema: { strict: true, schema } },
       n_predict: opts?.maxTokens ?? 120,
-      temperature: 0, // deterministic: we want the most likely valid action
-      top_k: 1,
+      // Low enough that tool arguments stay precise, warm enough that chat does not sound robotic.
+      temperature: opts?.temperature ?? 0.3,
+      top_k: 20,
+      top_p: 0.9,
     });
     this.record(res.timings);
     return res.content ?? res.text;
@@ -137,7 +108,7 @@ export class LocalQwenProvider implements AIProvider {
       jinja: true,
       chat_template_kwargs: { enable_thinking: false },
       n_predict: opts?.maxTokens ?? 120,
-      temperature: 0.4,
+      temperature: 0.6,
       top_k: 40,
       top_p: 0.9,
     });

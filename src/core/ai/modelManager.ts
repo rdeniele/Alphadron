@@ -1,6 +1,6 @@
 import * as FS from 'expo-file-system/legacy';
 import { extractArchive } from 'react-native-sherpa-onnx/extraction';
-import { MODEL_MANIFEST, type ModelId, type ModelSpec } from './modelManifest';
+import { LEGACY_MODEL_FILES, MODEL_MANIFEST, type ModelId, type ModelSpec } from './modelManifest';
 import {
   getModelState,
   setModelState,
@@ -202,4 +202,15 @@ export async function deleteModel(spec: ModelSpec): Promise<void> {
   await remove(pathFor(spec));
   await remove(`${pathFor(spec)}.part`);
   await reset(spec.id);
+}
+
+/**
+ * Deletes files of models that are no longer part of the app (e.g. the old 1.7B
+ * and Whisper-small downloads) so they stop using storage. Safe to run every launch.
+ */
+export async function removeLegacyModels(): Promise<void> {
+  for (const name of LEGACY_MODEL_FILES) {
+    await remove(`${MODELS_DIR}${name}`).catch(() => undefined);
+    await remove(`${MODELS_DIR}${name}.part`).catch(() => undefined);
+  }
 }
