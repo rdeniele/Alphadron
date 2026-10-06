@@ -6,6 +6,8 @@ export interface AppSettings {
   onboardingDone: boolean;
   /** Which Qwen3 model answers open-ended questions. */
   aiModel: 'qwen3_fast' | 'qwen3';
+  /** Which Android microphone source to record from. */
+  micSource: 'mic' | 'voice' | 'camcorder' | 'communication' | 'unprocessed';
 }
 
 export const defaultSettings: AppSettings = {
@@ -13,6 +15,7 @@ export const defaultSettings: AppSettings = {
   memoryEnabled: true,
   onboardingDone: false,
   aiModel: 'qwen3_fast',
+  micSource: 'mic',
 };
 
 export async function loadSettings(): Promise<AppSettings> {

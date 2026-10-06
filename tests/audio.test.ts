@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { prepareAudio, cleanTranscript, pcm16ToFloat32, chunkLevel, SAMPLE_RATE } from '../src/core/voice/audioUtils.ts';
+import { prepareAudio, cleanTranscript, pcm16ToFloat32, chunkLevel, isPromptEcho, SAMPLE_RATE } from '../src/core/voice/audioUtils.ts';
 
 const peakOf = (a: Float32Array) => a.reduce((m, v) => Math.max(m, Math.abs(v)), 0);
 
@@ -40,4 +40,11 @@ test('level meter: silence 0, speech > 0', () => {
 test('transcript cleaning', () => {
   assert.equal(cleanTranscript(' [BLANK_AUDIO] Remind me (music) tomorrow '), 'Remind me tomorrow');
   assert.equal(cleanTranscript('[ Silence ]'), '');
+});
+
+const PROMPT = 'Alphadex, remind me tomorrow at 9 AM to work on my project. Add a task. Create a note.';
+test('prompt echo is detected, real speech is not', () => {
+  assert.equal(isPromptEcho('Alphadex, remind me tomorrow at 9 AM to work on my project. Add a task.', PROMPT), true);
+  assert.equal(isPromptEcho('Remind me tomorrow at 9 AM to call John', PROMPT), false);
+  assert.equal(isPromptEcho('Add a task', PROMPT), false);
 });

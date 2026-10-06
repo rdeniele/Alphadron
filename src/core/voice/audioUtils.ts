@@ -85,3 +85,21 @@ export function cleanTranscript(raw: string): string {
     .trim();
 }
 
+
+/** Recordings quieter than this are treated as silence (nothing to transcribe). */
+export const SILENCE_LEVEL = 0.03;
+
+/**
+ * Whisper sometimes repeats its vocabulary prompt when there is no real speech.
+ * Detects that so it is never mistaken for something the user said.
+ */
+export function isPromptEcho(text: string, prompt: string): boolean {
+  const words = (s: string) => s.toLowerCase().replace(/[^a-z0-9 ]/g, ' ').split(/\s+/).filter(Boolean);
+  const t = words(text);
+  const p = new Set(words(prompt));
+  if (t.length < 4) {
+    return false;
+  }
+  const hits = t.filter(w => p.has(w)).length;
+  return hits / t.length > 0.8 && t.length >= 6;
+}

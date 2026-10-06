@@ -44,6 +44,10 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
     setMessages(await listMessages(id, 100));
   }, []);
 
+  useEffect(() => {
+    runtime.stt.micSource = settings.micSource;
+  }, [settings.micSource]);
+
   // Apply the model chosen in Settings (unloads the other one if needed).
   useEffect(() => {
     runtime.provider.setPreferred(settings.aiModel);
@@ -109,7 +113,12 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
       if (text) {
         await send(text, true);
       } else {
-        setError("I didn't catch anything. Tap the mic, speak clearly, then tap Done.");
+        const { peak } = runtime.stt.lastRecording;
+        setError(
+          peak < 0.05
+            ? 'The microphone recorded silence. Try another microphone in Settings → Microphone, then run the mic test.'
+            : "I couldn't make out words. Speak a little closer and clearly, or try a different microphone in Settings.",
+        );
       }
     } catch (e) {
       setError((e as Error).message);

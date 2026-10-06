@@ -3,7 +3,8 @@ import AudioRecord from '@fugood/react-native-audio-pcm-stream';
 import { initWhisper, type WhisperContext } from 'whisper.rn/index';
 import { MODEL_MANIFEST, type ModelId } from '../ai/modelManifest';
 import { getModelInfo, markLoaded } from '../ai/modelManager';
-import { SAMPLE_RATE, base64ToBytes, chunkLevel, cleanTranscript, pcm16ToFloat32, prepareAudio } from './audioUtils';
+import { micSourceId, type MicSource } from './micOptions';
+import { SILENCE_LEVEL, isPromptEcho, SAMPLE_RATE, base64ToBytes, chunkLevel, cleanTranscript, pcm16ToFloat32, prepareAudio } from './audioUtils';
 
 const MAX_SECONDS = 120;
 const toPath = (uri: string) => uri.replace(/^file:\/\//, '');
@@ -35,6 +36,11 @@ export class SpeechToTextService {
   private autoStop: ReturnType<typeof setTimeout> | null = null;
   private ctx: WhisperContext | null = null;
   state: SttState = 'idle';
+  /** Android audio source to record from (user-selectable in Settings). */
+  micSource: MicSource = 'mic';
+  /** Loudness stats of the last recording, to tell "silent mic" from "unclear speech". */
+  lastRecording: { seconds: number; peak: number } = { seconds: 0, peak: 0 };
+  private peak = 0;
   onStateChange?: (s: SttState) => void;
   /** Live input loudness 0..1 while recording (drives the level meter). */
   onLevel?: (level: number) => void;
@@ -86,7 +92,8 @@ export class SpeechToTextService {
     }
     this.chunks = [];
     this.bytes = 0;
-    AudioRecord.init({ sampleRate: SAMPLE_RATE, channels: 1, bitsPerSample: 16, audioSource: 6, bufferSize: 4096, wavFile: '' });
+    this.peak = 0;
+    AudioRecord.init({ sampleRate: SAMPLE_RATE, channels: 1, bitsPerSample: 16, audioSource: micSourceId(this.micSource), bufferSize: 4096, wavFile: '' });
     if (!this.wired) {
       AudioRecord.on('data', b64 => {
         if (this.state !== 'listening') {
@@ -95,7 +102,11 @@ export class SpeechToTextService {
         const bytes = base64ToBytes(b64);
         this.chunks.push(bytes);
         this.bytes += bytes.length;
-        this.onLevel?.(chunkLevel(bytes));
+        const lvl = chunkLevel(bytes);
+        if (lvl > this.peak) {
+          this.peak = lvl;
+        }
+        this.onLevel?.(lvl);
       });
       this.wired = true;
     }
@@ -117,8 +128,9 @@ export class SpeechToTextService {
     this.set('transcribing');
     try {
       const seconds = this.bytes / 2 / SAMPLE_RATE;
-      if (seconds < 0.5) {
-        return '';
+      this.lastRecording = { seconds, peak: this.peak };
+      if (seconds < 0.5 || this.peak < SILENCE_LEVEL) {
+        return ''; // too short or silent: nothing to transcribe
       }
       const samples = prepareAudio(pcm16ToFloat32(this.chunks));
       this.chunks = [];
@@ -132,7 +144,8 @@ export class SpeechToTextService {
         maxThreads: 4,
       });
       const res = await promise;
-      return cleanTranscript(res.result);
+      const text = cleanTranscript(res.result);
+      return isPromptEcho(text, VOCAB_PROMPT) ? '' : text;
     } finally {
       await this.release();
       this.set('idle');

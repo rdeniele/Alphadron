@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Switch, Text, TextInput } from 'react-native';
+import { Pressable, Switch, Text, TextInput, View } from 'react-native';
 import { ModelsPanel } from '../models/ModelsPanel';
 import { Button, Card, Chip, Row, Screen, SectionTitle, Title } from '../../components/ui';
 import { useTheme, type ThemeMode } from '../../theme';
@@ -9,6 +9,8 @@ import { useAssistant } from '../assistant/AssistantProvider';
 import { confirmAction } from '../../core/permissions/confirm';
 import { getPreference, setPreference } from '../../database/repositories/settingsRepo';
 import { runtime } from '../../core/runtime';
+import { MIC_OPTIONS } from '../../core/voice/micOptions';
+import { MicTest } from './MicTest';
 import { clearAllConversations } from '../../database/repositories/conversationsRepo';
 
 const MODES: ThemeMode[] = ['system', 'light', 'dark'];
@@ -83,6 +85,46 @@ export function SettingsScreen() {
 
       <SectionTitle>Status</SectionTitle>
       <Text style={{ color: t.text }}>{online ? 'Online (not required)' : 'Offline — everything still works'}</Text>
+
+      <SectionTitle>Microphone</SectionTitle>
+      <Text style={{ color: t.textDim, fontSize: 13 }}>
+        If voice isn't recognized, try another source and run the test. Some phones only work with one of them.
+      </Text>
+      {MIC_OPTIONS.map(o => (
+        <Pressable
+          key={o.key}
+          onPress={() => update('micSource', o.key)}
+          accessibilityRole="radio"
+          accessibilityState={{ selected: settings.micSource === o.key }}
+          style={{
+            borderWidth: 1,
+            borderColor: settings.micSource === o.key ? t.accent : t.border,
+            backgroundColor: t.surface,
+            borderRadius: 14,
+            padding: 12,
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 12,
+          }}>
+          <View
+            style={{
+              width: 20,
+              height: 20,
+              borderRadius: 10,
+              borderWidth: 2,
+              borderColor: settings.micSource === o.key ? t.accent : t.textDim,
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}>
+            {settings.micSource === o.key ? <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: t.accent }} /> : null}
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={{ color: t.text, fontSize: 16 }}>{o.label}</Text>
+            <Text style={{ color: t.textDim, fontSize: 12 }}>{o.hint}</Text>
+          </View>
+        </Pressable>
+      ))}
+      <MicTest />
 
       <SectionTitle>AI model for open-ended questions</SectionTitle>
       <Row wrap>
