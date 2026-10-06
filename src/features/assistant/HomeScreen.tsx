@@ -1,10 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
-import { Check, ChatCircleText, CircleDashed, Plus, WarningCircle } from 'phosphor-react-native';
+import { Check, CheckCircle, ChatCircleText, CircleDashed, Plus, WarningCircle, X } from 'phosphor-react-native';
 import { TalkButton } from './TalkButton';
 import { RecordingBar } from './RecordingBar';
-import { useAssistant } from './AssistantProvider';
+import { PHASE_LABEL, useAssistant } from './AssistantProvider';
 import { useQuickAdd } from '../common/QuickAdd';
 import { Card, Chip, Empty, Row, Screen, SectionTitle, fmtTime, useLayout } from '../../components/ui';
 import { useTheme } from '../../theme';
@@ -114,7 +114,7 @@ function greeting(name: string | null): string {
 export function HomeScreen() {
   const t = useTheme();
   const nav = useNavigation<{ navigate: (name: string) => void }>();
-  const { error, refresh } = useAssistant();
+  const { error, refresh, phase, lastTurn, dismissLastTurn, stopSpeaking } = useAssistant();
   const quick = useQuickAdd();
   const [data, reload] = useData(loadToday, EMPTY);
   const [filter, setFilter] = useState<Filter>('all');
@@ -182,6 +182,38 @@ export function HomeScreen() {
     <Screen footer={dock}>
       <Text style={{ color: t.text, fontSize: 26, fontWeight: '700' }}>{greeting(name)}</Text>
       <Text style={{ color: t.textDim, fontSize: 15, marginBottom: 4 }}>{dateLine}</Text>
+
+      {phase !== 'idle' && phase !== 'listening' ? (
+        <Card style={{ borderColor: t.accent }}>
+          <Text style={{ color: t.accent, fontWeight: '700' }}>{PHASE_LABEL[phase] || 'Working…'}</Text>
+          {phase === 'speaking' ? (
+            <Pressable onPress={stopSpeaking} accessibilityRole="button">
+              <Text style={{ color: t.accent, fontSize: 13, fontWeight: '600' }}>Stop speaking</Text>
+            </Pressable>
+          ) : null}
+        </Card>
+      ) : null}
+
+      {lastTurn && phase === 'idle' ? (
+        <Card style={{ borderColor: lastTurn.chip && !lastTurn.chip.ok ? t.danger : t.accent, gap: 6 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10 }}>
+            <Text style={{ color: t.textDim, flex: 1, fontSize: 13 }}>You: {lastTurn.user}</Text>
+            <Pressable onPress={dismissLastTurn} hitSlop={12} accessibilityLabel="Dismiss">
+              <X size={18} color={t.textDim} />
+            </Pressable>
+          </View>
+          <Text selectable style={{ color: t.text, fontSize: 17, lineHeight: 24 }}>{lastTurn.reply}</Text>
+          {lastTurn.chip ? (
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              {lastTurn.chip.ok ? <CheckCircle size={16} color={t.ok} weight="fill" /> : <WarningCircle size={16} color={t.danger} weight="fill" />}
+              <Text style={{ color: lastTurn.chip.ok ? t.ok : t.danger, fontSize: 13 }}>{lastTurn.chip.label}</Text>
+            </View>
+          ) : null}
+          <Pressable onPress={() => nav.navigate('Chat')} accessibilityRole="button">
+            <Text style={{ color: t.accent, fontSize: 13, fontWeight: '600' }}>Open in chat</Text>
+          </Pressable>
+        </Card>
+      ) : null}
 
       {data.next ? (
         <Card style={{ borderColor: t.accent, gap: 2 }}>
@@ -260,23 +292,31 @@ function HomeDock({ onAdd, onChat, error }: { onAdd: () => void; onChat: () => v
   return (
     <View style={{ alignItems: 'center', paddingTop: 10, paddingBottom: 10 }}>
       {error ? <Text style={{ color: t.danger, textAlign: 'center', paddingHorizontal: 20, marginBottom: 6 }}>{error}</Text> : null}
-      <View style={{ width: '100%', maxWidth, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-around', paddingHorizontal: 12 }}>
-        <DockButton label="Add" onPress={onAdd}>
+      <View style={{ width: '100%', maxWidth, flexDirection: 'row', alignItems: 'flex-start', paddingHorizontal: 12 }}>
+        <View style={{ flex: 1, alignItems: 'center' }}>
+          <DockButton label="Add" onPress={onAdd} offset={(MIC_SIZE - 54) / 2}>
           <Plus size={26} color={t.accent} weight="bold" />
         </DockButton>
-        <TalkButton size={76} />
-        <DockButton label="Chat" onPress={onChat}>
+        </View>
+        <View style={{ flex: 1, alignItems: 'center' }}>
+          <TalkButton size={MIC_SIZE} />
+        </View>
+        <View style={{ flex: 1, alignItems: 'center' }}>
+          <DockButton label="Chat" onPress={onChat} offset={(MIC_SIZE - 54) / 2}>
           <ChatCircleText size={26} color={t.accent} />
         </DockButton>
+        </View>
       </View>
     </View>
   );
 }
 
-function DockButton({ label, onPress, children }: { label: string; onPress: () => void; children: React.ReactNode }) {
+const MIC_SIZE = 76;
+
+function DockButton({ label, onPress, children, offset = 0 }: { label: string; onPress: () => void; children: React.ReactNode; offset?: number }) {
   const t = useTheme();
   return (
-    <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={label} style={{ alignItems: 'center', gap: 4, width: 72 }}>
+    <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={label} style={{ alignItems: 'center', gap: 4, width: 72, marginTop: offset }}>
       <View
         style={{
           width: 54,

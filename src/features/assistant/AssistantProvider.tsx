@@ -8,7 +8,17 @@ import {
 } from '../../database/repositories/conversationsRepo';
 import { useApp } from '../../services/AppState';
 
+export interface LastTurn {
+  user: string;
+  reply: string;
+  chip: { ok: boolean; label: string } | null;
+  spoken: boolean;
+}
+
 interface AssistantCtx {
+  /** Most recent exchange, so screens other than Chat (e.g. Home) can show the result. */
+  lastTurn: LastTurn | null;
+  dismissLastTurn: () => void;
   messages: ChatMessage[];
   phase: Phase;
   error: string | null;
@@ -37,6 +47,7 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
   const [phase, setPhase] = useState<Phase>('idle');
   const [error, setError] = useState<string | null>(null);
   const [dataVersion, setDataVersion] = useState(0);
+  const [lastTurn, setLastTurn] = useState<LastTurn | null>(null);
   const starting = useRef<Promise<void> | null>(null);
 
   const reload = useCallback(async () => {
@@ -71,13 +82,20 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
         return;
       }
       setError(null);
+      setLastTurn(null);
       // Show the user's message immediately.
       setMessages(m => [
         ...m,
         { id: -Date.now(), conversationId: 0, role: 'user', content: clean, toolJson: null, createdAt: Date.now() },
       ]);
       try {
-        await runtime.sendText(clean, { memoryEnabled: memoryEnabled.current, speak });
+        const res = await runtime.sendText(clean, { memoryEnabled: memoryEnabled.current, speak });
+        setLastTurn({
+          user: clean,
+          reply: res.assistantMessage.content,
+          chip: res.action ? { ok: res.action.result.ok, label: res.action.result.chip } : null,
+          spoken: speak,
+        });
       } catch (e) {
         setError((e as Error).message);
       } finally {
@@ -141,6 +159,8 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
     await runtime.cancelTalking();
   }, []);
 
+  const dismissLastTurn = useCallback(() => setLastTurn(null), []);
+
   const stopSpeaking = useCallback(() => runtime.stopSpeaking(), []);
   const refresh = useCallback(() => {
     setDataVersion(v => v + 1);
@@ -153,8 +173,8 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
   }, [reload]);
 
   const value = useMemo(
-    () => ({ messages, phase, error, dataVersion, send, startRecording, finishRecording, cancelRecording, stopSpeaking, newChat, reload, refresh }),
-    [messages, phase, error, dataVersion, send, startRecording, finishRecording, cancelRecording, stopSpeaking, newChat, reload, refresh],
+    () => ({ lastTurn, dismissLastTurn, messages, phase, error, dataVersion, send, startRecording, finishRecording, cancelRecording, stopSpeaking, newChat, reload, refresh }),
+    [lastTurn, dismissLastTurn, messages, phase, error, dataVersion, send, startRecording, finishRecording, cancelRecording, stopSpeaking, newChat, reload, refresh],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
