@@ -27,7 +27,7 @@
     },
     "plugins": [
       "expo-sqlite",
-      "expo-notifications",
+      ["expo-notifications", { "sounds": ["./assets/sounds/alphadex_chime.wav"] }],
       "expo-audio",
       [
         "expo-build-properties",

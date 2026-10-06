@@ -9,6 +9,7 @@ import { useAssistant } from '../assistant/AssistantProvider';
 import { confirmAction } from '../../core/permissions/confirm';
 import { getPreference, setPreference } from '../../database/repositories/settingsRepo';
 import { runtime } from '../../core/runtime';
+import { platform } from '../../platform';
 import { MIC_OPTIONS, micLabel, type MicSetting } from '../../core/voice/micOptions';
 import { MicTest } from './MicTest';
 import { clearAllConversations } from '../../database/repositories/conversationsRepo';
@@ -48,6 +49,15 @@ export function SettingsScreen() {
     getPreference('user_name').then(v => setName(v ?? ''));
   }, []);
 
+  const testAlert = async () => {
+    platform.notifications.setAlertPrefs({ sound: settings.alertSound, style: settings.alertStyle });
+    if (await platform.notifications.ensurePermission()) {
+      await platform.notifications.showNow('Alphadex', 'This is how your due alerts will sound.');
+    } else {
+      await confirmAction('Notifications are turned off for Alphadron. Turn them on in Android settings to get alerts.', 'OK');
+    }
+  };
+
   const clearChats = async () => {
     if (await confirmAction('Delete all chat history? Tasks, reminders and memories are kept.', 'Delete')) {
       await clearAllConversations();
@@ -86,6 +96,38 @@ export function SettingsScreen() {
           <Switch value={settings.speakReplies} onValueChange={v => update('speakReplies', v)} />
         </Row>
       </Card>
+
+      <SectionTitle>Alerts</SectionTitle>
+      <Card>
+        <Row gap={12}>
+          <View style={{ flex: 1 }}>
+            <Text style={{ color: t.text, fontSize: 16 }}>Chime when something is due</Text>
+            <Text style={{ color: t.textDim, fontSize: 12 }}>
+              One soft chime at the due time for reminders, events and tasks. It never repeats or nags.
+            </Text>
+          </View>
+          <Switch value={settings.alertSound} onValueChange={v => update('alertSound', v)} />
+        </Row>
+      </Card>
+      {settings.alertSound ? (
+        <Row wrap>
+          <Chip label="Gentle" active={settings.alertStyle === 'gentle'} onPress={() => update('alertStyle', 'gentle')} />
+          <Chip label="Alarm volume" active={settings.alertStyle === 'alarm'} onPress={() => update('alertStyle', 'alarm')} />
+        </Row>
+      ) : null}
+      <Text style={{ color: t.textDim, fontSize: 13 }}>
+        {settings.alertStyle === 'alarm' && settings.alertSound
+          ? 'Alarm volume rings at your alarm volume, even when the phone is on silent.'
+          : 'Gentle follows your notification volume and respects silent mode.'}{' '}
+        Tasks with only a date alert at 9:00 AM that day.
+      </Text>
+      <Row wrap>
+        <Button label="Play a test alert" kind="ghost" onPress={testAlert} />
+        <Button label="Make alerts exact" kind="ghost" onPress={() => platform.notifications.openExactAlarmSettings()} />
+      </Row>
+      <Text style={{ color: t.textDim, fontSize: 12 }}>
+        For alerts right on the minute, allow "Alarms &amp; reminders" for Alphadron when Android asks.
+      </Text>
 
       <SectionTitle>Microphone</SectionTitle>
       <Text style={{ color: t.textDim, fontSize: 13 }}>

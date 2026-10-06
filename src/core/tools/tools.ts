@@ -1,7 +1,7 @@
 import { dateOnlyDue, endOfLocalDay, formatDue, formatWhen, parseRange, parseWhen, startOfLocalDay } from '../scheduling/dateParse';
 import { looksSensitive } from '../memory/sensitive';
 import { SUPPORTED_APPS } from '../../platform/android/device';
-import { cancelReminderNotification, scheduleReminder } from '../reminders/scheduler';
+import { cancelReminderNotification, cancelTaskAlert, scheduleEventAlert, scheduleReminder, syncTaskAlert } from '../reminders/scheduler';
 import * as tasks from '../../database/repositories/tasksRepo';
 import * as reminders from '../../database/repositories/remindersRepo';
 import * as events from '../../database/repositories/eventsRepo';
@@ -53,6 +53,7 @@ export const TOOLS: Tool[] = [
         dueAt,
         priority: a.priority ? PRIORITY[String(a.priority)] : 2,
       });
+      await syncTaskAlert(t).catch(() => undefined);
       const due = dueAt ? ` It's due ${formatDue(dueAt, ctx.now)}.` : '';
       return { ok: true, summary: `Added the task "${t.title}".${due}`, chip: 'Task created', data: t };
     },
@@ -71,6 +72,7 @@ export const TOOLS: Tool[] = [
         return fail("I couldn't find a matching open task.");
       }
       await tasks.completeTask(t.id);
+      await cancelTaskAlert(t.id);
       return { ok: true, summary: `Marked "${t.title}" as done.`, chip: 'Task completed', data: t };
     },
   },
@@ -317,6 +319,7 @@ export const TOOLS: Tool[] = [
         startsAt: p.date.getTime(),
         endsAt: dur ? p.date.getTime() + dur * 60000 : null,
       });
+      await scheduleEventAlert(e).catch(() => undefined);
       return {
         ok: true,
         summary: `Added "${e.title}" to your schedule for ${formatWhen(p.date, ctx.now)}.`,

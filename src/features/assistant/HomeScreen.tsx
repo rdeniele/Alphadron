@@ -15,6 +15,7 @@ import { listReminders } from '../../database/repositories/remindersRepo';
 import { listEvents } from '../../database/repositories/eventsRepo';
 import { getPreference } from '../../database/repositories/settingsRepo';
 import { endOfLocalDay, startOfLocalDay } from '../../core/scheduling/dateParse';
+import { cancelTaskAlert } from '../../core/reminders/scheduler';
 
 type Kind = 'reminder' | 'event' | 'task';
 type Filter = 'all' | 'tasks' | 'reminders' | 'schedule';
@@ -141,6 +142,7 @@ export function HomeScreen() {
 
   const complete = async (x: tasks.Task) => {
     await tasks.completeTask(x.id);
+    await cancelTaskAlert(x.id);
     await reload();
     refresh();
   };

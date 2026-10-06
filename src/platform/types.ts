@@ -1,6 +1,17 @@
 /** Platform abstractions. Android implements these now; Windows will later. */
 
+export type AlertStyle = 'gentle' | 'alarm';
+
+export interface AlertPrefs {
+  /** Play the chime (otherwise just a short vibration). */
+  sound: boolean;
+  /** 'gentle' follows the phone's notification volume; 'alarm' uses the alarm volume (rings even on silent). */
+  style: AlertStyle;
+}
+
 export interface NotificationService {
+  /** Applies the user's alert preferences. Already scheduled alerts must be re-registered afterwards. */
+  setAlertPrefs(prefs: AlertPrefs): void;
   /** Asks for permission if needed. Returns whether notifications can be shown. */
   ensurePermission(): Promise<boolean>;
   schedule(input: {
@@ -12,6 +23,8 @@ export interface NotificationService {
   }): Promise<void>;
   cancel(key: string): Promise<void>;
   showNow(title: string, body: string): Promise<void>;
+  /** Opens the system screen where the user can allow exact alarms (alerts on the minute). */
+  openExactAlarmSettings(): Promise<void>;
 }
 
 export interface DeviceInfo {

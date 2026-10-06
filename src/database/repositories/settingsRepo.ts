@@ -8,6 +8,10 @@ export interface AppSettings {
   micSource: 'auto' | 'mic' | 'voice' | 'camcorder' | 'communication' | 'unprocessed';
   /** Read assistant replies aloud even when the question was typed. */
   speakReplies: boolean;
+  /** Play a chime when something is due. */
+  alertSound: boolean;
+  /** 'gentle' = notification volume, 'alarm' = alarm volume (rings on silent). */
+  alertStyle: 'gentle' | 'alarm';
 }
 
 export const defaultSettings: AppSettings = {
@@ -16,6 +20,8 @@ export const defaultSettings: AppSettings = {
   onboardingDone: false,
   micSource: 'auto',
   speakReplies: false,
+  alertSound: true,
+  alertStyle: 'gentle',
 };
 
 export async function loadSettings(): Promise<AppSettings> {

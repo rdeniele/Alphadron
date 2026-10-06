@@ -9,7 +9,7 @@ import { useQuickAdd, type AddMode } from '../common/QuickAdd';
 import * as tasks from '../../database/repositories/tasksRepo';
 import * as reminders from '../../database/repositories/remindersRepo';
 import * as events from '../../database/repositories/eventsRepo';
-import { cancelReminderNotification } from '../../core/reminders/scheduler';
+import { cancelEventAlert, cancelReminderNotification, cancelTaskAlert, syncTaskAlert } from '../../core/reminders/scheduler';
 import { endOfLocalDay, isDateOnlyDue, startOfLocalDay } from '../../core/scheduling/dateParse';
 
 type Tab = 'agenda' | 'tasks' | 'reminders' | 'schedule';
@@ -74,7 +74,16 @@ export function PlanScreen() {
   })();
 
   const toggleTask = async (x: tasks.Task) => {
-    await (x.status === 'done' ? tasks.reopenTask(x.id) : tasks.completeTask(x.id));
+    if (x.status === 'done') {
+      await tasks.reopenTask(x.id);
+      const reopened = await tasks.getTask(x.id);
+      if (reopened) {
+        await syncTaskAlert(reopened).catch(() => undefined);
+      }
+    } else {
+      await tasks.completeTask(x.id);
+      await cancelTaskAlert(x.id);
+    }
     reloadAll();
   };
 
@@ -98,7 +107,7 @@ export function PlanScreen() {
           </Text>
         ) : null}
       </View>
-      <Pressable onPress={() => confirmDelete(x.title, () => tasks.deleteTask(x.id))} hitSlop={10} accessibilityLabel="Delete task">
+      <Pressable onPress={() => confirmDelete(x.title, async () => { await tasks.deleteTask(x.id); await cancelTaskAlert(x.id); })} hitSlop={10} accessibilityLabel="Delete task">
         <Trash size={20} color={t.danger} />
       </Pressable>
     </Card>
@@ -192,7 +201,7 @@ export function PlanScreen() {
                     {fmtDay(x.startsAt)} {fmtTime(x.startsAt)}
                   </Text>
                 </View>
-                <Pressable onPress={() => confirmDelete(x.title, () => events.deleteEvent(x.id))} hitSlop={10} accessibilityLabel="Delete event">
+                <Pressable onPress={() => confirmDelete(x.title, async () => { await events.deleteEvent(x.id); await cancelEventAlert(x.id); })} hitSlop={10} accessibilityLabel="Delete event">
                   <Trash size={20} color={t.danger} />
                 </Pressable>
               </Card>

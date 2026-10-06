@@ -7,6 +7,7 @@ import { RootNavigator } from './src/navigation/RootNavigator';
 import { ThemeProvider, useTheme } from './src/theme';
 import { rescheduleAll } from './src/core/reminders/scheduler';
 import { runtime } from './src/core/runtime';
+import { platform } from './src/platform';
 import { removeLegacyModels } from './src/core/ai/modelManager';
 
 function Themed() {
@@ -20,9 +21,13 @@ function Themed() {
 
 function Shell() {
   const t = useTheme();
+  const { settings } = useApp();
+  // Apply the alert style and re-register every pending alert (also survives reboot/update).
   useEffect(() => {
-    // Re-register pending reminders on every launch (survives reboot/update).
+    platform.notifications.setAlertPrefs({ sound: settings.alertSound, style: settings.alertStyle });
     rescheduleAll().catch(() => undefined);
+  }, [settings.alertSound, settings.alertStyle]);
+  useEffect(() => {
     removeLegacyModels().catch(() => undefined);
     return () => {
       runtime.releaseAll();
