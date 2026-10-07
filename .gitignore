@@ -91,3 +91,6 @@ release/
 
 # Local one-off scratch
 scripts/_*.js
+
+# Marketing assets
+marketing/
