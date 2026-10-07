@@ -27,7 +27,7 @@ export function OnboardingScreen() {
       <ModelsPanel />
 
       <View style={{ marginTop: 6 }}>
-        <Button label="Let's go" onPress={() => update('onboardingDone', true)} />
+        <Button label="Let's go" kind="light" onPress={() => update('onboardingDone', true)} />
       </View>
       <Text style={{ color: t.textDim, fontSize: 12, textAlign: 'center' }}>
         You can download the models later from Settings.

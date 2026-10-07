@@ -116,7 +116,7 @@ export function Button({
 }: {
   label: string;
   onPress: () => void;
-  kind?: 'primary' | 'ghost' | 'danger';
+  kind?: 'primary' | 'light' | 'ghost' | 'danger';
   disabled?: boolean;
   flex?: boolean;
 }) {
@@ -130,6 +130,8 @@ export function Button({
       style={({ pressed }) => [{ opacity: disabled ? 0.45 : pressed ? 0.85 : 1, flex: flex ? 1 : undefined }]}>
       {kind === 'primary' ? (
         <AccentFill style={[s.btn, s.btnGlow]}>{body(t.onAccent)}</AccentFill>
+      ) : kind === 'light' ? (
+        <View style={[s.btn, { backgroundColor: t.light }]}>{body(t.onLight)}</View>
       ) : (
         <View style={[s.btn, { borderWidth: 1, borderColor: kind === 'danger' ? t.danger : t.border, backgroundColor: t.surface }]}>
           {body(kind === 'danger' ? t.danger : t.text)}
@@ -280,11 +282,11 @@ export function fmtDay(ms: number, now = new Date()): string {
 }
 
 const s = StyleSheet.create({
-  card: { borderWidth: 1, borderRadius: 24, padding: 16, gap: 4 },
-  section: { fontSize: 12, fontWeight: '700', letterSpacing: 1.8, marginTop: 14, marginBottom: 2 },
+  card: { borderWidth: 1, borderRadius: 26, padding: 16, gap: 4 },
+  section: { fontSize: 12, fontWeight: '700', letterSpacing: 1.6, marginTop: 14, marginBottom: 2 },
   btn: { minHeight: 52, paddingHorizontal: 22, borderRadius: 999, alignItems: 'center', justifyContent: 'center' },
   btnGlow: {
-    shadowColor: '#FF4D8D',
+    shadowColor: '#4D7CFF',
     shadowOpacity: 0.45,
     shadowRadius: 14,
     shadowOffset: { width: 0, height: 6 },
@@ -305,7 +307,7 @@ const s = StyleSheet.create({
     width: 60,
     height: 60,
     borderRadius: 30,
-    shadowColor: '#FF4D8D',
+    shadowColor: '#4D7CFF',
     shadowOpacity: 0.5,
     shadowRadius: 14,
     shadowOffset: { width: 0, height: 6 },

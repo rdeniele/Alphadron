@@ -49,10 +49,23 @@ export function SettingsScreen() {
     getPreference('user_name').then(v => setName(v ?? ''));
   }, []);
 
-  const testAlert = async () => {
+  const [testNote, setTestNote] = useState('');
+  const [channelInfo, setChannelInfo] = useState('');
+
+  useEffect(() => {
+    platform.notifications.setAlertPrefs({ sound: settings.alertSound, style: settings.alertStyle });
+    platform.notifications.describeAlertChannel().then(setChannelInfo).catch(() => setChannelInfo(''));
+  }, [settings.alertSound, settings.alertStyle]);
+
+  const testAlert = async (afterSeconds: number) => {
     platform.notifications.setAlertPrefs({ sound: settings.alertSound, style: settings.alertStyle });
     if (await platform.notifications.ensurePermission()) {
-      await platform.notifications.showNow('Alphadron', 'This is how your due alerts will sound.');
+      await platform.notifications.showNow('Alphadron', 'This is how your due alerts will sound.', afterSeconds);
+      setTestNote(
+        afterSeconds > 1
+          ? 'Alert coming in 10 seconds. Lock your phone now and listen.'
+          : 'Alert sent. You should hear the chime now.',
+      );
     } else {
       await confirmAction('Notifications are turned off for Alphadron. Turn them on in Android settings to get alerts.', 'OK');
     }
@@ -121,13 +134,28 @@ export function SettingsScreen() {
           : 'Gentle follows your notification volume and respects silent mode.'}{' '}
         Tasks with only a date alert at 9:00 AM that day.
       </Text>
-      <Row wrap>
-        <Button label="Play a test alert" kind="ghost" onPress={testAlert} />
-        <Button label="Make alerts exact" kind="ghost" onPress={() => platform.notifications.openExactAlarmSettings()} />
-      </Row>
-      <Text style={{ color: t.textDim, fontSize: 12 }}>
-        For alerts right on the minute, allow "Alarms &amp; reminders" for Alphadron when Android asks.
-      </Text>
+      <Card>
+        <Text style={{ color: t.text, fontWeight: '700' }}>Test your alerts</Text>
+        <Text style={{ color: t.textDim, fontSize: 13 }}>
+          "Play now" sounds right away while the app is open. "In 10 seconds" is the real test: tap it, then lock your phone and listen.
+        </Text>
+        <Row wrap>
+          <Button label="Play now" kind="ghost" onPress={() => testAlert(1)} />
+          <Button label="In 10 seconds" kind="ghost" onPress={() => testAlert(10)} />
+        </Row>
+        {testNote ? <Text style={{ color: t.accent, fontSize: 13 }}>{testNote}</Text> : null}
+        {channelInfo ? <Text style={{ color: t.textDim, fontSize: 12 }}>{channelInfo}</Text> : null}
+        <Text style={{ color: t.textDim, fontSize: 12 }}>
+          No sound? Make sure Do Not Disturb is off and the notification volume is up. You can also check the alert sound in Android's settings.
+        </Text>
+        <Row wrap>
+          <Button label="Alert sound settings" kind="ghost" onPress={() => platform.notifications.openAlertSoundSettings()} />
+          <Button label="Make alerts exact" kind="ghost" onPress={() => platform.notifications.openExactAlarmSettings()} />
+        </Row>
+        <Text style={{ color: t.textDim, fontSize: 12 }}>
+          For alerts right on the minute, allow "Alarms and reminders" for Alphadron when Android asks.
+        </Text>
+      </Card>
 
       <SectionTitle>Microphone</SectionTitle>
       <Text style={{ color: t.textDim, fontSize: 13 }}>

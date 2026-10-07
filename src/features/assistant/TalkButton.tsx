@@ -63,7 +63,7 @@ const s = StyleSheet.create({
   wrap: { alignItems: 'center', gap: 6 },
   btn: { alignItems: 'center', justifyContent: 'center' },
   glow: {
-    shadowColor: '#FF4D8D',
+    shadowColor: '#4D7CFF',
     shadowOpacity: 0.6,
     shadowRadius: 18,
     shadowOffset: { width: 0, height: 6 },

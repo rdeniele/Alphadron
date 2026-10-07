@@ -22,7 +22,12 @@ export interface NotificationService {
     repeat?: 'daily' | 'weekly' | null;
   }): Promise<void>;
   cancel(key: string): Promise<void>;
-  showNow(title: string, body: string): Promise<void>;
+  /** Shows an alert after a short delay (default 1 second). */
+  showNow(title: string, body: string, afterSeconds?: number): Promise<void>;
+  /** Plain-language description of how Android is set up to play the alert (for troubleshooting). */
+  describeAlertChannel(): Promise<string>;
+  /** Opens Android's sound settings for the alert channel. */
+  openAlertSoundSettings(): Promise<void>;
   /** Opens the system screen where the user can allow exact alarms (alerts on the minute). */
   openExactAlarmSettings(): Promise<void>;
 }
