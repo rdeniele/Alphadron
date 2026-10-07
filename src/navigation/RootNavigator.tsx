@@ -2,6 +2,7 @@ import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { CalendarCheck, GearSix, House, Notebook } from 'phosphor-react-native';
 import { QuickAddProvider } from '../features/common/QuickAdd';
+import { ItemDetailProvider } from '../features/common/ItemDetail';
 import { HomeScreen } from '../features/assistant/HomeScreen';
 import { ChatModalProvider } from '../features/assistant/ChatModal';
 import { PlanScreen } from '../features/tasks/PlanScreen';
@@ -25,6 +26,7 @@ export function RootNavigator() {
   return (
     <AssistantProvider>
       <QuickAddProvider>
+      <ItemDetailProvider>
       <ChatModalProvider>
       <Tab.Navigator
         screenOptions={{
@@ -42,6 +44,7 @@ export function RootNavigator() {
         <Tab.Screen name="Settings" component={SettingsScreen} options={{ tabBarIcon: (p: IconProps) => <GearSix {...p} /> }} />
       </Tab.Navigator>
       </ChatModalProvider>
+      </ItemDetailProvider>
       </QuickAddProvider>
     </AssistantProvider>
   );

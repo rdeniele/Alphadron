@@ -54,3 +54,23 @@ export async function listEvents(from: number, to: number): Promise<ScheduledEve
 export async function deleteEvent(id: number) {
   await getDb().runAsync('DELETE FROM scheduled_events WHERE id = ?', id);
 }
+
+export async function getEvent(id: number): Promise<ScheduledEvent | null> {
+  const r = await getDb().getFirstAsync<Row>('SELECT * FROM scheduled_events WHERE id = ?', id);
+  return r ? map(r) : null;
+}
+
+export async function updateEvent(
+  id: number,
+  patch: { title: string; notes: string | null; startsAt: number; endsAt: number | null },
+): Promise<ScheduledEvent | null> {
+  await getDb().runAsync(
+    'UPDATE scheduled_events SET title = ?, notes = ?, starts_at = ?, ends_at = ? WHERE id = ?',
+    patch.title,
+    patch.notes,
+    patch.startsAt,
+    patch.endsAt,
+    id,
+  );
+  return getEvent(id);
+}

@@ -8,7 +8,7 @@ import { useTheme } from '../theme';
 const atHour = (base: Date, dayOffset: number, hour: number, minute = 0) =>
   new Date(base.getFullYear(), base.getMonth(), base.getDate() + dayOffset, hour, minute);
 
-export function formatPicked(d: Date, now = new Date()): string {
+export function formatPicked(d: Date, now = new Date(), dateOnly = false): string {
   const day = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
   const diff = Math.round((day(d) - day(now)) / 86400000);
   const label =
@@ -17,6 +17,9 @@ export function formatPicked(d: Date, now = new Date()): string {
       : diff === 1
         ? 'Tomorrow'
         : d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+  if (dateOnly) {
+    return label;
+  }
   const h = d.getHours();
   const time = `${h % 12 === 0 ? 12 : h % 12}:${String(d.getMinutes()).padStart(2, '0')} ${h < 12 ? 'AM' : 'PM'}`;
   return `${label}, ${time}`;
@@ -33,10 +36,12 @@ export function DateTimeField({
   value,
   onChange,
   optional,
+  dateOnly,
 }: {
   value: Date | null;
   onChange: (d: Date | null) => void;
   optional?: boolean;
+  dateOnly?: boolean;
 }) {
   const t = useTheme();
   const now = new Date();
@@ -99,7 +104,7 @@ export function DateTimeField({
         }}>
         <CalendarBlank size={22} color={t.accent} />
         <Text style={{ color: value ? t.text : t.textDim, fontSize: 16, flex: 1 }}>
-          {value ? formatPicked(value) : 'Pick date & time'}
+          {value ? formatPicked(value, new Date(), dateOnly) : 'Pick date & time'}
         </Text>
         {optional && value ? (
           <Pressable onPress={() => onChange(null)} hitSlop={10}>

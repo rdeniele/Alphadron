@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
 import { Alert, Pressable, Text, View } from 'react-native';
-import { CaretLeft, CaretRight, Check, CircleDashed, Trash } from 'phosphor-react-native';
+import { CaretLeft, CaretRight, Check, CircleDashed, PencilSimple, Trash } from 'phosphor-react-native';
 import { Card, Chip, Empty, Fab, Row, Screen, Title, fmtDay, fmtTime } from '../../components/ui';
 import { useTheme } from '../../theme';
 import { useData } from '../../services/useData';
 import { useAssistant } from '../assistant/AssistantProvider';
 import { useQuickAdd, type AddMode } from '../common/QuickAdd';
+import { useItemDetail } from '../common/ItemDetail';
 import * as tasks from '../../database/repositories/tasksRepo';
 import * as reminders from '../../database/repositories/remindersRepo';
 import * as events from '../../database/repositories/eventsRepo';
@@ -23,6 +24,7 @@ const ADD_MODE: Record<Tab, AddMode> = { agenda: 'reminder', tasks: 'task', remi
 
 interface AgendaItem {
   key: string;
+  id: number;
   at: number | null;
   title: string;
   kind: 'reminder' | 'event' | 'task';
@@ -33,6 +35,7 @@ export function PlanScreen() {
   const t = useTheme();
   const { refresh } = useAssistant();
   const quick = useQuickAdd();
+  const detail = useItemDetail();
   const [tab, setTab] = useState<Tab>('agenda');
   const [dayOffset, setDayOffset] = useState(0);
 
@@ -62,14 +65,14 @@ export function PlanScreen() {
     const timed: AgendaItem[] = [
       ...remList
         .filter(r => r.triggerAt >= dayStart && r.triggerAt <= end)
-        .map(r => ({ key: `r${r.id}`, at: r.triggerAt, title: r.title, kind: 'reminder' as const })),
+        .map(r => ({ key: `r${r.id}`, id: r.id, at: r.triggerAt, title: r.title, kind: 'reminder' as const })),
       ...evList
         .filter(e => e.startsAt >= dayStart && e.startsAt <= end)
-        .map(e => ({ key: `e${e.id}`, at: e.startsAt, title: e.title, kind: 'event' as const })),
+        .map(e => ({ key: `e${e.id}`, id: e.id, at: e.startsAt, title: e.title, kind: 'event' as const })),
     ].sort((a, b) => (a.at ?? 0) - (b.at ?? 0));
     const due: AgendaItem[] = taskList
       .filter(x => x.dueAt !== null && x.dueAt >= dayStart && x.dueAt <= end)
-      .map(x => ({ key: `t${x.id}`, at: null, title: x.title, kind: 'task' as const, task: x }));
+      .map(x => ({ key: `t${x.id}`, id: x.id, at: null, title: x.title, kind: 'task' as const, task: x }));
     return [...timed, ...due];
   })();
 
@@ -98,7 +101,7 @@ export function PlanScreen() {
       <Pressable onPress={() => toggleTask(x)} hitSlop={10} accessibilityLabel={x.status === 'done' ? 'Mark not done' : 'Mark done'}>
         {x.status === 'done' ? <Check size={26} color={t.ok} weight="bold" /> : <CircleDashed size={26} color={t.textDim} />}
       </Pressable>
-      <View style={{ flex: 1 }}>
+      <Pressable style={{ flex: 1 }} onPress={() => detail.open('task', x.id)} accessibilityLabel={`Open ${x.title}`}>
         <Text style={{ color: t.text, fontSize: 16, textDecorationLine: x.status === 'done' ? 'line-through' : 'none' }}>{x.title}</Text>
         {x.dueAt ? (
           <Text style={{ color: t.textDim, fontSize: 13 }}>
@@ -106,7 +109,10 @@ export function PlanScreen() {
             {isDateOnlyDue(x.dueAt) ? '' : ` ${fmtTime(x.dueAt)}`}
           </Text>
         ) : null}
-      </View>
+      </Pressable>
+      <Pressable onPress={() => detail.open('task', x.id)} hitSlop={10} accessibilityLabel="Edit task">
+        <PencilSimple size={20} color={t.accent} />
+      </Pressable>
       <Pressable onPress={() => confirmDelete(x.title, async () => { await tasks.deleteTask(x.id); await cancelTaskAlert(x.id); })} hitSlop={10} accessibilityLabel="Delete task">
         <Trash size={20} color={t.danger} />
       </Pressable>
@@ -147,10 +153,13 @@ export function PlanScreen() {
                 ) : (
                   <Card key={i.key} style={{ flexDirection: 'row', gap: 12, alignItems: 'center' }}>
                     <Text style={{ color: t.accent, fontWeight: '700', width: 74 }}>{i.at ? fmtTime(i.at) : ''}</Text>
-                    <View style={{ flex: 1 }}>
+                    <Pressable style={{ flex: 1 }} onPress={() => detail.open(i.kind === 'reminder' ? 'reminder' : 'event', i.id)} accessibilityLabel={`Open ${i.title}`}>
                       <Text style={{ color: t.text, fontSize: 16 }}>{i.title}</Text>
                       <Text style={{ color: t.textDim, fontSize: 12 }}>{i.kind === 'reminder' ? 'Reminder' : 'Event'}</Text>
-                    </View>
+                    </Pressable>
+                    <Pressable onPress={() => detail.open(i.kind === 'reminder' ? 'reminder' : 'event', i.id)} hitSlop={10} accessibilityLabel="Edit">
+                      <PencilSimple size={20} color={t.accent} />
+                    </Pressable>
                   </Card>
                 ),
               )
@@ -169,13 +178,16 @@ export function PlanScreen() {
           (remList.length ? (
             remList.map(x => (
               <Card key={x.id} style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-                <View style={{ flex: 1 }}>
+                <Pressable style={{ flex: 1 }} onPress={() => detail.open('reminder', x.id)} accessibilityLabel={`Open ${x.title}`}>
                   <Text style={{ color: t.text, fontSize: 16 }}>{x.title}</Text>
                   <Text style={{ color: t.textDim, fontSize: 13 }}>
                     {fmtDay(x.triggerAt)} {fmtTime(x.triggerAt)}
                     {x.repeatRule ? ` · repeats ${x.repeatRule}` : ''}
                   </Text>
-                </View>
+                </Pressable>
+                <Pressable onPress={() => detail.open('reminder', x.id)} hitSlop={10} accessibilityLabel="Edit reminder">
+                  <PencilSimple size={20} color={t.accent} />
+                </Pressable>
                 <Pressable
                   onPress={() =>
                     confirmDelete(x.title, async () => {
@@ -197,12 +209,15 @@ export function PlanScreen() {
           (evList.length ? (
             evList.map(x => (
               <Card key={x.id} style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-                <View style={{ flex: 1 }}>
+                <Pressable style={{ flex: 1 }} onPress={() => detail.open('event', x.id)} accessibilityLabel={`Open ${x.title}`}>
                   <Text style={{ color: t.text, fontSize: 16 }}>{x.title}</Text>
                   <Text style={{ color: t.textDim, fontSize: 13 }}>
                     {fmtDay(x.startsAt)} {fmtTime(x.startsAt)}
                   </Text>
-                </View>
+                </Pressable>
+                <Pressable onPress={() => detail.open('event', x.id)} hitSlop={10} accessibilityLabel="Edit event">
+                  <PencilSimple size={20} color={t.accent} />
+                </Pressable>
                 <Pressable onPress={() => confirmDelete(x.title, async () => { await events.deleteEvent(x.id); await cancelEventAlert(x.id); })} hitSlop={10} accessibilityLabel="Delete event">
                   <Trash size={20} color={t.danger} />
                 </Pressable>

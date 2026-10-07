@@ -101,3 +101,18 @@ export async function findReminder(query: { id?: number; title?: string }): Prom
   }
   return best?.r ?? null;
 }
+
+export async function updateReminder(
+  id: number,
+  patch: { title: string; message: string | null; triggerAt: number; repeatRule: string | null },
+): Promise<Reminder | null> {
+  await getDb().runAsync(
+    'UPDATE reminders SET title = ?, message = ?, trigger_at = ?, repeat_rule = ?, enabled = 1 WHERE id = ?',
+    patch.title,
+    patch.message,
+    patch.triggerAt,
+    patch.repeatRule,
+    id,
+  );
+  return getReminder(id);
+}

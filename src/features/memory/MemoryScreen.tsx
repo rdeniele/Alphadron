@@ -7,6 +7,7 @@ import { useData } from '../../services/useData';
 import { useApp } from '../../services/AppState';
 import { useAssistant } from '../assistant/AssistantProvider';
 import { useQuickAdd } from '../common/QuickAdd';
+import { useItemDetail } from '../common/ItemDetail';
 import { confirmAction } from '../../core/permissions/confirm';
 import * as memories from '../../database/repositories/memoriesRepo';
 import * as notes from '../../database/repositories/notesRepo';
@@ -18,6 +19,7 @@ export function MemoryScreen() {
   const { settings, update } = useApp();
   const { refresh } = useAssistant();
   const quick = useQuickAdd();
+  const detail = useItemDetail();
   const [tab, setTab] = useState<Tab>('notes');
   const [query, setQuery] = useState('');
   const [noteList, reloadNotes] = useData(() => notes.listNotes(200), [] as notes.Note[]);
@@ -57,11 +59,17 @@ export function MemoryScreen() {
             {shownNotes.length ? (
               shownNotes.map(n => (
                 <Card key={n.id}>
-                  <Text selectable style={{ color: t.text, fontSize: 16, lineHeight: 23 }}>{n.body}</Text>
+                  <Pressable onPress={() => detail.open('note', n.id)} accessibilityLabel="Open note">
+                    {n.title ? <Text style={{ color: t.text, fontSize: 16, fontWeight: '700' }}>{n.title}</Text> : null}
+                    <Text numberOfLines={6} style={{ color: t.text, fontSize: 16, lineHeight: 23 }}>{n.body}</Text>
+                  </Pressable>
                   <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 6 }}>
                     <Text style={{ color: t.textDim, fontSize: 12 }}>
                       {fmtDay(n.updatedAt)} {fmtTime(n.updatedAt)}
                     </Text>
+                    <Pressable onPress={() => detail.open('note', n.id)} hitSlop={10} accessibilityLabel="Edit note">
+                      <PencilSimple size={20} color={t.accent} />
+                    </Pressable>
                     <Pressable
                       onPress={() =>
                         Alert.alert('Delete this note?', n.body.slice(0, 80), [

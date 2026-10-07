@@ -63,3 +63,13 @@ export async function searchNotes(query: string, limit = 10): Promise<Note[]> {
 export async function deleteNote(id: number) {
   await getDb().runAsync('DELETE FROM notes WHERE id = ?', id);
 }
+
+export async function getNote(id: number): Promise<Note | null> {
+  const r = await getDb().getFirstAsync<Row>('SELECT * FROM notes WHERE id = ?', id);
+  return r ? map(r) : null;
+}
+
+export async function updateNote(id: number, patch: { title: string | null; body: string }): Promise<Note | null> {
+  await getDb().runAsync('UPDATE notes SET title = ?, body = ?, updated_at = ? WHERE id = ?', patch.title, patch.body, Date.now(), id);
+  return getNote(id);
+}

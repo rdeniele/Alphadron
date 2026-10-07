@@ -1,12 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
-import { Check, CheckCircle, ChatCircleText, CircleDashed, Plus, WarningCircle, X } from 'phosphor-react-native';
+import { CheckCircle, ChatCircleText, CircleDashed, PencilSimple, Plus, WarningCircle, X } from 'phosphor-react-native';
 import { TalkButton } from './TalkButton';
 import { RecordingBar } from './RecordingBar';
 import { PHASE_LABEL, useAssistant } from './AssistantProvider';
 import { useQuickAdd } from '../common/QuickAdd';
 import { useChatModal } from './ChatModal';
+import { useItemDetail } from '../common/ItemDetail';
 import { Card, Chip, Empty, Row, Screen, SectionTitle, Wordmark, fmtTime, useLayout } from '../../components/ui';
 import { useTheme } from '../../theme';
 import { useData } from '../../services/useData';
@@ -22,6 +23,7 @@ type Filter = 'all' | 'tasks' | 'reminders' | 'schedule';
 
 interface Item {
   key: string;
+  id: number;
   kind: Kind;
   title: string;
   at: number | null;
@@ -35,7 +37,7 @@ interface Today {
   timed: Item[];
   due: Item[];
   tomorrow: { count: number; titles: string[] };
-  next: { title: string; at: number; kind: Kind } | null;
+  next: { id: number; title: string; at: number; kind: Kind } | null;
 }
 
 const EMPTY: Today = { overdue: [], timed: [], due: [], tomorrow: { count: 0, titles: [] }, next: null };
@@ -59,13 +61,13 @@ async function loadToday(): Promise<Today> {
 
   const overdue: Item[] = openDue
     .filter(x => x.dueAt !== null && x.dueAt < startToday)
-    .map(x => ({ key: `t${x.id}`, kind: 'task', title: x.title, at: x.dueAt, overdue: true, task: x }));
+    .map(x => ({ key: `t${x.id}`, id: x.id, kind: 'task', title: x.title, at: x.dueAt, overdue: true, task: x }));
   const due: Item[] = openDue
     .filter(x => x.dueAt !== null && x.dueAt >= startToday && x.dueAt <= endToday)
-    .map(x => ({ key: `t${x.id}`, kind: 'task', title: x.title, at: x.dueAt, task: x }));
+    .map(x => ({ key: `t${x.id}`, id: x.id, kind: 'task', title: x.title, at: x.dueAt, task: x }));
   const timed: Item[] = [
-    ...rems.map<Item>(r => ({ key: `r${r.id}`, kind: 'reminder', title: r.title, at: r.triggerAt, past: r.triggerAt < nowMs })),
-    ...evs.map<Item>(e => ({ key: `e${e.id}`, kind: 'event', title: e.title, at: e.startsAt, past: e.startsAt < nowMs })),
+    ...rems.map<Item>(r => ({ key: `r${r.id}`, id: r.id, kind: 'reminder', title: r.title, at: r.triggerAt, past: r.triggerAt < nowMs })),
+    ...evs.map<Item>(e => ({ key: `e${e.id}`, id: e.id, kind: 'event', title: e.title, at: e.startsAt, past: e.startsAt < nowMs })),
   ].sort((a, b) => (a.at ?? 0) - (b.at ?? 0));
 
   const tomorrowTitles = [
@@ -77,8 +79,8 @@ async function loadToday(): Promise<Today> {
   ].sort((a, b) => a.at - b.at);
 
   const upcoming = [
-    ...upcomingRems.map(r => ({ title: r.title, at: r.triggerAt, kind: 'reminder' as Kind })),
-    ...upcomingEvs.map(e => ({ title: e.title, at: e.startsAt, kind: 'event' as Kind })),
+    ...upcomingRems.map(r => ({ id: r.id, title: r.title, at: r.triggerAt, kind: 'reminder' as Kind })),
+    ...upcomingEvs.map(e => ({ id: e.id, title: e.title, at: e.startsAt, kind: 'event' as Kind })),
   ].sort((a, b) => a.at - b.at);
 
   return {
@@ -118,6 +120,7 @@ export function HomeScreen() {
   const nav = useNavigation<{ navigate: (name: string) => void }>();
   const { error, refresh, phase, lastTurn, heard, dismissLastTurn, stopSpeaking } = useAssistant();
   const quick = useQuickAdd();
+  const detail = useItemDetail();
   const chat = useChatModal();
   const [data, reload] = useData(loadToday, EMPTY);
   const [filter, setFilter] = useState<Filter>('all');
@@ -156,13 +159,15 @@ export function HomeScreen() {
       ) : (
         <Text style={{ color: t.accent, fontWeight: '700', width: 72 }}>{i.at ? fmtTime(i.at) : ''}</Text>
       )}
-      <View style={{ flex: 1 }}>
+      <Pressable style={{ flex: 1 }} onPress={() => detail.open(i.kind, i.id)} accessibilityLabel={`Open ${i.title}`}>
         <Text style={{ color: t.text, fontSize: 16 }}>{i.title}</Text>
         <Text style={{ color: i.overdue ? t.danger : t.textDim, fontSize: 12 }}>
           {i.task ? (i.overdue ? 'Overdue' : 'Due today') : i.kind === 'reminder' ? 'Reminder' : 'Event'}
         </Text>
-      </View>
-      {i.task ? <Check size={18} color={t.textDim} /> : null}
+      </Pressable>
+      <Pressable onPress={() => detail.open(i.kind, i.id)} hitSlop={10} accessibilityLabel={`Edit ${i.title}`}>
+        <PencilSimple size={20} color={t.accent} />
+      </Pressable>
     </Card>
   );
 
@@ -224,6 +229,7 @@ export function HomeScreen() {
       ) : null}
 
       {data.next ? (
+        <Pressable onPress={() => detail.open(data.next!.kind, data.next!.id)} accessibilityLabel={`Open ${data.next.title}`}>
         <Card style={{ borderColor: t.accent, gap: 2 }}>
           <Text style={{ color: t.accent, fontSize: 12, fontWeight: '700', textTransform: 'uppercase' }}>
             Up next · {untilText(data.next.at)}
@@ -233,6 +239,7 @@ export function HomeScreen() {
             {fmtTime(data.next.at)} · {data.next.kind === 'reminder' ? 'Reminder' : 'Event'}
           </Text>
         </Card>
+        </Pressable>
       ) : null}
 
       <Row wrap gap={8}>

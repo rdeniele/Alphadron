@@ -112,3 +112,18 @@ export async function findOpenTask(query: { id?: number; title?: string }): Prom
   }
   return best?.t ?? null;
 }
+
+export async function updateTask(
+  id: number,
+  patch: { title: string; description: string | null; priority: number; dueAt: number | null },
+): Promise<Task | null> {
+  await getDb().runAsync(
+    'UPDATE tasks SET title = ?, description = ?, priority = ?, due_at = ? WHERE id = ?',
+    patch.title,
+    patch.description,
+    patch.priority,
+    patch.dueAt,
+    id,
+  );
+  return getTask(id);
+}
